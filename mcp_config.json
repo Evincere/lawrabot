@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "lawrabot-legal-service": {
+      "command": "cmd",
+      "args": [
+        "/C",
+        "cd /d b:\\CODE\\PROYECTOS\\lawrabot\\divorce_mcp_server && mvnw.cmd spring-boot:run"
+      ],
+      "env": {
+        "OLLAMA_CLOUD_API_KEY": "PON_TU_API_KEY_EN_EL_DOTENV",
+        "SPRING_PROFILES_ACTIVE": "dev"
+      }
+    }
+  }
+}

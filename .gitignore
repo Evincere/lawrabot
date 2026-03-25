@@ -1,0 +1,49 @@
+# General
+.env
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node.js
+**/node_modules/
+**/dist/
+**/build/
+**/npm-debug.log*
+**/yarn-error.log*
+.pnpm-debug.log*
+
+# Java (Maven)
+**/target/
+**/*.class
+**/*.jar
+**/*.war
+**/*.ear
+**/*.zip
+**/*.tar.gz
+**/*.rar
+**/pom.xml.tag
+**/pom.xml.releaseBackup
+**/pom.xml.versionsBackup
+**/pom.xml.next
+**/release.properties
+**/dependency-reduced-pom.xml
+**/buildNumber.properties
+**/.mvn/wrapper/maven-wrapper.jar
+**/.mvn/jvm.config
+**/.mvn/maven.config
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+.settings/
+.project
+.classpath
+.factorypath
+bin/
+
+# Docker
+.docker_temp/
