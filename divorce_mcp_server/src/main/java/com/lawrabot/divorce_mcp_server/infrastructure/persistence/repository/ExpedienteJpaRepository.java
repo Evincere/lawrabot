@@ -17,6 +17,7 @@ import java.util.UUID;
  * Implementación JPA del puerto de salida para la gestión de Expedientes.
  */
 @Repository
+@SuppressWarnings("null") // Spring Data JPA methods lack @NonNull annotations
 public class ExpedienteJpaRepository implements IExpedienteRepository {
 
     private final SpringDataExpedienteRepository springDataRepository;

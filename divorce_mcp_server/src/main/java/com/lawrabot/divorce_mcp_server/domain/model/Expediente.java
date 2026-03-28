@@ -127,7 +127,8 @@ public class Expediente {
         if (this.socioEconomicProfile == null) {
             this.socioEconomicProfile = SocioEconomicProfile.createForScraping();
         }
-        this.socioEconomicProfile.updateScrapingResult(result, observations);
+        SocioEconomicProfile profile = this.socioEconomicProfile;
+        profile.updateScrapingResult(result, observations);
         
         if (result == BlsgScrapingResultEnum.PROVISIONALLY_REJECTED) {
             this.status = ExpedienteStatusEnum.BLSG_RECHAZADO;

@@ -18,7 +18,8 @@ public class ChildMapper {
     public ChildJpaEntity toEntity(Child domain, @Nullable UUID dispositivoId) {
         if (domain == null) return null;
         
-        String dniValue = (domain.getDni() != null) ? domain.getDni().getValue() : null;
+        DNIVO dniVO = domain.getDni();
+        String dniValue = (dniVO != null) ? dniVO.getValue() : null;
         String firstName = (domain.getName() != null) ? domain.getName().getFirstName() : null;
         String lastName = (domain.getName() != null) ? domain.getName().getLastName() : null;
 

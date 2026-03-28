@@ -22,8 +22,10 @@ public class SpouseMapper {
 
         String firstName = (domain.getName() != null) ? domain.getName().getFirstName() : null;
         String lastName = (domain.getName() != null) ? domain.getName().getLastName() : null;
-        String phone = (domain.getPhoneNumber() != null) ? domain.getPhoneNumber().getValue() : null;
-        String cuil = (domain.getCuil() != null) ? domain.getCuil().getValue() : null;
+        PhoneNumberVO phoneVO = domain.getPhoneNumber();
+        String phone = (phoneVO != null) ? phoneVO.getValue() : null;
+        CuilVO cuilVO = domain.getCuil();
+        String cuil = (cuilVO != null) ? cuilVO.getValue() : null;
 
         return SpouseJpaEntity.builder()
                 .id(domain.getId())

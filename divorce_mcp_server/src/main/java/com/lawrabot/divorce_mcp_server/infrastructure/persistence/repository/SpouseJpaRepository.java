@@ -14,6 +14,7 @@ import java.util.UUID;
  * Implementación JPA del puerto de salida para Cónyuges.
  */
 @Repository
+@SuppressWarnings("null") // Spring Data JPA methods lack @NonNull annotations
 public class SpouseJpaRepository implements ISpouseRepository {
 
     private final SpringDataSpouseRepository springDataRepository;

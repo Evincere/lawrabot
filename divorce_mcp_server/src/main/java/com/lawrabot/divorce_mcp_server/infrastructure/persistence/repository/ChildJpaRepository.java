@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
  * Implementación JPA del puerto de salida para Hijos.
  */
 @Repository
+@SuppressWarnings("null") // Spring Data JPA methods lack @NonNull annotations
 public class ChildJpaRepository implements IChildRepository {
 
     private final SpringDataChildRepository springDataRepository;
