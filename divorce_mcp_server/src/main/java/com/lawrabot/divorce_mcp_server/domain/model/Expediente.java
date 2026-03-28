@@ -2,6 +2,7 @@ package com.lawrabot.divorce_mcp_server.domain.model;
 
 import com.lawrabot.divorce_mcp_server.domain.enums.DivorceTypeEnum;
 import com.lawrabot.divorce_mcp_server.domain.enums.ExpedienteStatusEnum;
+import com.lawrabot.divorce_mcp_server.domain.enums.DataCollectionStageEnum;
 import com.lawrabot.divorce_mcp_server.domain.valueobject.AddressVO;
 import com.lawrabot.divorce_mcp_server.domain.valueobject.PhoneNumberVO;
 import lombok.AccessLevel;
@@ -33,6 +34,7 @@ public class Expediente {
     private UUID id;
     private PhoneNumberVO contactPhoneNumber;
     private ExpedienteStatusEnum status;
+    private DataCollectionStageEnum collectionStage; // Para guiar al LLM/Bot
     private DivorceTypeEnum divorceType; // UNILATERAL o JOINT
 
     // ============================================
@@ -40,10 +42,13 @@ public class Expediente {
     // ============================================
     
     // Último domicilio conyugal (Art. 717 CCyC: determina competencia territorial)
+    @Setter(AccessLevel.NONE)
     private AddressVO lastConjugalResidence;
 
     // Fechas Críticas para el Régimen Patrimonial (Bienes)
+    @Setter(AccessLevel.NONE)
     private LocalDate marriageDate;
+    @Setter(AccessLevel.NONE)
     private LocalDate deFactoSeparationDate; // Marca el cese de ganancialidad (Art. 480)
 
     // Requisitos de admisibilidad (Art. 438 y 439 CCyC)
@@ -74,6 +79,7 @@ public class Expediente {
                 .contactPhoneNumber(phoneNumber)
                 .divorceType(divorceType)
                 .status(ExpedienteStatusEnum.BLSG_PRECONSULTA) // Todo caso entra primero por filtro BLSG
+                .collectionStage(DataCollectionStageEnum.PENDING_BASIC_INFO) // Inicia en la etapa más básica
                 .children(new ArrayList<>())
                 .requiresBLSG(true) // En Defensoría casi el 100% lo requiere por defecto
                 // El convenio inicia vacío o nulo hasta que el bot haga las preguntas patrimoniales
@@ -81,6 +87,45 @@ public class Expediente {
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
+    }
+
+    // ============================================
+    // LÓGICA DE NEGOCIO (Recolección Conversacional)
+    // ============================================
+
+    /**
+     * Ingresa la data central del matrimonio, usualmente la segunda etapa conversacional.
+     */
+    public void provideMarriageDetails(LocalDate marriageDate, LocalDate separationDate, AddressVO lastResidence) {
+        if (marriageDate == null) {
+            throw new IllegalArgumentException("La fecha de matrimonio es obligatoria.");
+        }
+        if (separationDate != null && separationDate.isBefore(marriageDate)) {
+            throw new IllegalArgumentException("La fecha de separación de hecho no puede ser anterior al matrimonio.");
+        }
+        
+        this.marriageDate = marriageDate;
+        this.deFactoSeparationDate = separationDate;
+        this.lastConjugalResidence = lastResidence;
+        
+        // Si estábamos esperando estos detalles, avanzamos el "cursor" conversacional
+        if (this.collectionStage == DataCollectionStageEnum.PENDING_MARRIAGE_DETAILS) {
+            this.collectionStage = DataCollectionStageEnum.PENDING_CHILDREN_INFO;
+        }
+        updateTimestamp();
+    }
+
+    /**
+     * Registra la existencia de hijos (tercera etapa conversacional).
+     */
+    public void registerChildren(List<Child> declaredChildren) {
+        this.children = declaredChildren != null ? declaredChildren : new ArrayList<>();
+        
+        // Avanzamos el "cursor"
+        if (this.collectionStage == DataCollectionStageEnum.PENDING_CHILDREN_INFO) {
+            this.collectionStage = DataCollectionStageEnum.PENDING_REGULATORY_AGREEMENT;
+        }
+        updateTimestamp();
     }
 
     // ============================================
