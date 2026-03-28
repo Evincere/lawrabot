@@ -1,8 +1,9 @@
 package com.lawrabot.divorce_mcp_server.domain.model;
 
+import com.lawrabot.divorce_mcp_server.domain.enums.BlsgScrapingResultEnum;
+import com.lawrabot.divorce_mcp_server.domain.enums.DataCollectionStageEnum;
 import com.lawrabot.divorce_mcp_server.domain.enums.DivorceTypeEnum;
 import com.lawrabot.divorce_mcp_server.domain.enums.ExpedienteStatusEnum;
-import com.lawrabot.divorce_mcp_server.domain.enums.DataCollectionStageEnum;
 import com.lawrabot.divorce_mcp_server.domain.valueobject.AddressVO;
 import com.lawrabot.divorce_mcp_server.domain.valueobject.PhoneNumberVO;
 import lombok.AccessLevel;
@@ -55,8 +56,10 @@ public class Expediente {
     // Propuesta (si es unilateral) o Convenio (si es conjunto)
     private RegulatoryAgreement regulatoryAgreement;
 
-    // Requisitos de patrocinio público
-    private boolean requiresBLSG; // Beneficio de Litigar Sin Gastos
+    // Requisitos de patrocinio público.
+    // El perfil completo reemplaza al flag booleano simple.
+    @Setter(AccessLevel.NONE)
+    private SocioEconomicProfile socioEconomicProfile;
 
     // ============================================
     // RELACIONES (Participantes)
@@ -78,15 +81,71 @@ public class Expediente {
                 .id(UUID.randomUUID())
                 .contactPhoneNumber(phoneNumber)
                 .divorceType(divorceType)
-                .status(ExpedienteStatusEnum.BLSG_PRECONSULTA) // Todo caso entra primero por filtro BLSG
-                .collectionStage(DataCollectionStageEnum.PENDING_BASIC_INFO) // Inicia en la etapa más básica
+                .status(ExpedienteStatusEnum.BLSG_PRECONSULTA)
+                .collectionStage(DataCollectionStageEnum.PENDING_BLSG_SCRAPING) // Empieza siempre por el filtro BLSG
+                .socioEconomicProfile(SocioEconomicProfile.createForScraping()) // Perfil listo para recibir resultado
                 .children(new ArrayList<>())
-                .requiresBLSG(true) // En Defensoría casi el 100% lo requiere por defecto
-                // El convenio inicia vacío o nulo hasta que el bot haga las preguntas patrimoniales
-                .regulatoryAgreement(null) 
+                .regulatoryAgreement(null)
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
+    }
+
+    // ============================================
+    // LÓGICA DE NEGOCIO (Filtro BLSG)
+    // ============================================
+
+    /**
+     * Registra el resultado del Scraping del Poder Judicial (Fase 1 del BLSG).
+     * Si el resultado es un rechazo definitivo, cierra el expediente.
+     * Si es aprobado o inconcluyente, avanza a la etapa de evaluación profunda.
+     *
+     * @param result Resultado del scraping automatizado.
+     * @param justification Texto descriptivo del resultado (puede ser nulo).
+     */
+    public void processScrapingResult(BlsgScrapingResultEnum result, String justification) {
+        if (this.socioEconomicProfile == null) {
+            this.socioEconomicProfile = SocioEconomicProfile.createForScraping();
+        }
+        // Usamos el builder del perfil existente con los nuevos datos del scraping
+        this.socioEconomicProfile = SocioEconomicProfile.builder()
+                .id(this.socioEconomicProfile.getId())
+                .scrapingResult(result)
+                .scrapingJustification(justification)
+                .build();
+
+        if (result == BlsgScrapingResultEnum.PROVISIONALLY_REJECTED) {
+            // Rechazo inmediato: el Poder Judicial registra bienes o ingresos incompatibles.
+            this.status = ExpedienteStatusEnum.BLSG_RECHAZADO;
+            log.warn("Expediente {} rechazado por scraping BLSG: {}", id, justification);
+        } else {
+            // Aprobado o Inconcluyente: la duda favorece al solicitante, continua con evaluación interna.
+            this.collectionStage = DataCollectionStageEnum.PENDING_SOCIOECONOMIC_EVALUATION;
+            log.info("Expediente {} avanza a evaluación socioeconómica. Resultado scraping: {}", id, result);
+        }
+        updateTimestamp();
+    }
+
+    /**
+     * Registra la evaluación socioeconómica interna de la Defensoría (Fase 2 del BLSG).
+     * Si el solicitante supera los umbrales o tiene activos significativos, se rechaza.
+     *
+     * @param updatedProfile El perfil completo con todos los datos declarados por el cliente.
+     * @param approved Decisión final del Defensor/Bot basada en criterios internos.
+     */
+    public void evaluateDefensoriaCriteria(SocioEconomicProfile updatedProfile, boolean approved) {
+        this.socioEconomicProfile = updatedProfile;
+
+        if (!approved) {
+            this.status = ExpedienteStatusEnum.BLSG_RECHAZADO;
+            log.warn("Expediente {} rechazado por criterios internos de la Defensoría.", id);
+        } else {
+            // BLSG aprobado: ahora sí arranca el cuestionario de divorcio.
+            this.status = ExpedienteStatusEnum.IN_DATA_COLLECTION_PROGRESS;
+            this.collectionStage = DataCollectionStageEnum.PENDING_BASIC_INFO;
+            log.info("Expediente {} BLSG aprobado. Iniciando recopilación de datos del divorcio.", id);
+        }
+        updateTimestamp();
     }
 
     // ============================================
