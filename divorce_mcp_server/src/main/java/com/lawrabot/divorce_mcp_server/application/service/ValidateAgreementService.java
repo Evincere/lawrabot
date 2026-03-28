@@ -4,11 +4,16 @@ import com.lawrabot.divorce_mcp_server.application.port.in.ValidateAgreementLega
 import com.lawrabot.divorce_mcp_server.application.port.out.IExpedienteRepository;
 import com.lawrabot.divorce_mcp_server.domain.model.Expediente;
 import com.lawrabot.divorce_mcp_server.domain.model.RegulatoryAgreement;
+import com.lawrabot.divorce_mcp_server.domain.model.agreement.*;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Servicio encargado de la validación preventiva de un convenio regulador contra
+ * reglas de buena práctica jurídica y normas básicas del Código Civil.
+ */
 public class ValidateAgreementService implements ValidateAgreementLegalityUseCase {
 
     private final IExpedienteRepository expedienteRepository;
@@ -31,35 +36,41 @@ public class ValidateAgreementService implements ValidateAgreementLegalityUseCas
         }
 
         // --- Alimentos ---
-        if (agreement.getAlimonyProvision() != null) {
-            if (agreement.getAlimonyProvision().isIndexationMissingWarning()) {
+        AlimonyProvision alimony = agreement.getAlimonyProvision();
+        if (alimony != null) {
+            if (alimony.isIndexationMissingWarning()) {
                 alertsToBot.add("ALIMONY_WARNING_LACKS_UPDATE_MECHANISM");
             }
         }
 
         // --- Cuidado Personal ---
-        if (agreement.getPersonalCare() != null) {
-            if (agreement.getPersonalCare().isUnilateralWarning()) {
+        PersonalCare care = agreement.getPersonalCare();
+        if (care != null) {
+            if (care.isUnilateralWarning()) {
                 alertsToBot.add("PERSONAL_CARE_UNILATERAL_REQUIRES_ALIMONY_JUSTIFICATION");
             }
-            if (agreement.getPersonalCare().requiresAlimonyWarning()) {
+            if (care.requiresAlimonyWarning()) {
                 alertsToBot.add("NO_MINOR_CHILDREN_NO_CARE_NEEDED");
             }
         }
 
         // --- Distribución de Bienes ---
-        if (agreement.getAssetDistribution() != null && agreement.getAssetDistribution().requiresTaxWarning()) {
-            alertsToBot.add("ASSET_DISTRIBUTION_TAX_WARNING");
+        AssetDistribution assets = agreement.getAssetDistribution();
+        if (assets != null) {
+            if (assets.requiresTaxWarning()) {
+                alertsToBot.add("ASSET_DISTRIBUTION_TAX_WARNING");
+            }
         }
 
         // --- Compensación Económica ---
-        if (agreement.getEconomicCompensation() != null) {
-             if (agreement.getEconomicCompensation().requiresExpressWaiver()) {
-                 alertsToBot.add("EC_REQUIRES_EXPRESS_WAIVER");
-             }
-             if (agreement.getEconomicCompensation().isMissingJustificationWarning()) {
-                 alertsToBot.add("EC_MISSING_JUSTIFICATION");
-             }
+        EconomicCompensation ec = agreement.getEconomicCompensation();
+        if (ec != null) {
+            if (ec.requiresExpressWaiver()) {
+                alertsToBot.add("EC_REQUIRES_EXPRESS_WAIVER");
+            }
+            if (ec.isMissingJustificationWarning()) {
+                alertsToBot.add("EC_MISSING_JUSTIFICATION");
+            }
         }
         
         // --- Cónyuges ---

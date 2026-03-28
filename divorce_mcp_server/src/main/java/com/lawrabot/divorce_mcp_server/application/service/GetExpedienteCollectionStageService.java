@@ -5,8 +5,9 @@ import com.lawrabot.divorce_mcp_server.application.port.out.IExpedienteRepositor
 import com.lawrabot.divorce_mcp_server.domain.enums.DataCollectionStageEnum;
 import com.lawrabot.divorce_mcp_server.domain.model.Expediente;
 
-import java.util.Optional;
-
+/**
+ * Servicio encargado de determinar en qué fase de recolección de datos se encuentra un cliente.
+ */
 public class GetExpedienteCollectionStageService implements GetExpedienteCollectionStageUseCase {
 
     private final IExpedienteRepository repository;
@@ -17,9 +18,8 @@ public class GetExpedienteCollectionStageService implements GetExpedienteCollect
 
     @Override
     public DataCollectionStageEnum queryByClientPhone(String phoneNumber) {
-        Optional<Expediente> expedienteOpt = repository.findActiveByClientPhone(phoneNumber);
-        
-        // Si hay expediente activo (en borrador), retornamos su etapa conversacional.
-        return expedienteOpt.map(Expediente::getCollectionStage).orElse(null);
+        return repository.findActiveByClientPhone(phoneNumber)
+                .map(Expediente::getCollectionStage)
+                .orElse(null);
     }
 }

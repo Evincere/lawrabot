@@ -4,55 +4,48 @@ import com.lawrabot.divorce_mcp_server.domain.enums.AgreementStatusEnum;
 import com.lawrabot.divorce_mcp_server.domain.model.agreement.AlimonyProvision;
 import com.lawrabot.divorce_mcp_server.domain.model.agreement.AssetDistribution;
 import com.lawrabot.divorce_mcp_server.domain.model.agreement.CommunicationRegime;
-import com.lawrabot.divorce_mcp_server.domain.model.agreement.PersonalCare;
 import com.lawrabot.divorce_mcp_server.domain.model.agreement.EconomicCompensation;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
+import com.lawrabot.divorce_mcp_server.domain.model.agreement.PersonalCare;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import org.springframework.lang.Nullable;
 
 import java.util.UUID;
 
 /**
- * Entidad que representa la Propuesta Reguladora o el Convenio Regulador
- * exigido por el Art. 438 y 439 del Código Civil y Comercial argentino.
- * 
- * Si el divorcio es UNILATERAL, se trata de una Propuesta.
- * Si el divorcio es JOINT (Conjunto), se trata de un Convenio Acordado.
+ * Convenio Regulatorio (Art. 439 CCCN).
+ * Engloba todas las disposiciones sobre hijos, bienes y prestaciones.
  */
 @Getter
-@Setter
 @Builder
-@NoArgsConstructor
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class RegulatoryAgreement {
 
-    private UUID id;
+    private final UUID id;
 
-    // Estado Procesal del Convenio / Propuesta (Dinamico post-presentación en Juzgado)
     private AgreementStatusEnum status;
 
-    // ============================================
-    // DISPOSICIONES SOBRE LOS HIJOS (Responsabilidad Parental)
-    // ============================================
-    
-    // Indica si el convenio contempla cláusulas para hijos
-    // (Útil para evitar campos nulos o para mostrar validaciones en el frontend)
     private boolean includesChildrenProvisions;
 
+    // HIJOS Y CUIDADO
+    // ============================================
+
+    @Nullable
     private PersonalCare personalCare;
+    @Nullable
     private CommunicationRegime communicationRegime;
+
+    // ALIMENTOS (Art. 439 inc. a)
+    @Nullable
     private AlimonyProvision alimonyProvision;
 
-    // ============================================
     // DISPOSICIONES PATRIMONIALES Y PERSONALES
     // ============================================
 
+    @Nullable
     private AssetDistribution assetDistribution;
     
     // Art. 441 - Compensación Económica
+    @Nullable
     private EconomicCompensation economicCompensation;
 
     /**
@@ -64,12 +57,6 @@ public class RegulatoryAgreement {
                 .id(UUID.randomUUID())
                 .status(AgreementStatusEnum.PROPOSED)
                 .includesChildrenProvisions(false)
-                // Se instanciarán o asignarán a medida que avance el trámite
-                .personalCare(null)
-                .communicationRegime(null)
-                .alimonyProvision(null)
-                .assetDistribution(null)
-                .economicCompensation(null)
                 .build();
     }
 

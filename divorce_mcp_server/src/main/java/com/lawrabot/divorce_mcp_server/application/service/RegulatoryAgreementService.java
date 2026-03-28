@@ -8,6 +8,9 @@ import com.lawrabot.divorce_mcp_server.domain.model.RegulatoryAgreement;
 
 import java.util.UUID;
 
+/**
+ * Servicio que orquesta la redacción del convenio regulador.
+ */
 public class RegulatoryAgreementService implements DraftRegulatoryAgreementUseCase {
 
     private final IExpedienteRepository expedienteRepository;
@@ -18,17 +21,25 @@ public class RegulatoryAgreementService implements DraftRegulatoryAgreementUseCa
 
     @Override
     public RegulatoryAgreement draftAlimony(UUID expedienteId, Object alimonyDataDTO) {
-        // Aquí recuperaríamos el expediente de la DB
         Expediente expediente = expedienteRepository.findById(expedienteId)
                 .orElseThrow(() -> new IllegalArgumentException("Expediente no encontrado."));
 
-        // Lógica de validación cruzada: si tiene hijos o no.
+        // Si no hay convenio, lo creamos
+        if (expediente.getRegulatoryAgreement() == null) {
+            expediente.setRegulatoryAgreement(RegulatoryAgreement.createEmpty());
+        }
         
-        // Se instanciarían Value Objects usando AlimonyAmountVO.of(...)
-        // Se inyectaría al RegulatoryAgreement del expediente.
+        // Aquí se procesaría el DTO y se actualizaría el convenio...
+        // RegulatoryAgreement agreement = expediente.getRegulatoryAgreement();
+        // agreement.updateAlimony(alimonyData);
         
         expedienteRepository.save(expediente);
-        return expediente.getRegulatoryAgreement();
+        
+        RegulatoryAgreement result = expediente.getRegulatoryAgreement();
+        if (result == null) {
+            throw new IllegalStateException("Error al generar el convenio regulador.");
+        }
+        return result;
     }
 
     @Override
@@ -36,13 +47,26 @@ public class RegulatoryAgreementService implements DraftRegulatoryAgreementUseCa
         Expediente expediente = expedienteRepository.findById(expedienteId)
                 .orElseThrow(() -> new IllegalArgumentException("Expediente no encontrado."));
 
-        if (expediente.getRegulatoryAgreement() == null) {
+        RegulatoryAgreement agreement = expediente.getRegulatoryAgreement();
+        if (agreement == null) {
             throw new IllegalStateException("No existe un Convenio redactado para aceptar.");
         }
 
-        // MÁQUINA DE ESTADOS:
         // Transiciona de PROPOSED a ACCEPTED
-        expediente.getRegulatoryAgreement().setStatus(AgreementStatusEnum.ACCEPTED);
+        // Nota: Deberíamos usar un método en el Dominio para esto, pero por simplicidad:
+        // agreement.accept();
+        expediente.setRegulatoryAgreement(
+            RegulatoryAgreement.builder()
+                .id(agreement.getId())
+                .status(AgreementStatusEnum.ACCEPTED)
+                .includesChildrenProvisions(agreement.isIncludesChildrenProvisions())
+                .alimonyProvision(agreement.getAlimonyProvision())
+                .personalCare(agreement.getPersonalCare())
+                .communicationRegime(agreement.getCommunicationRegime())
+                .assetDistribution(agreement.getAssetDistribution())
+                .economicCompensation(agreement.getEconomicCompensation())
+                .build()
+        );
 
         expedienteRepository.save(expediente);
     }

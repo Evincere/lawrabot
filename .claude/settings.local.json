@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /b/Code/Proyectos/lawrabot/agent -name *.test.ts -o -name *.spec.ts)",
+      "Bash(npx tsc:*)",
+      "WebSearch",
+      "WebFetch(domain:whiskeysockets-baileys-94.mintlify.app)",
+      "WebFetch(domain:github.com)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "WebFetch(domain:www.libhunt.com)",
+      "Bash(find . -name *.md -path *doc*)",
+      "Bash(mkdir:*)",
+      "Bash(npm list:*)",
+      "Bash(npm install:*)",
+      "Bash(adr-log -d .)"
+    ]
+  }
+}
