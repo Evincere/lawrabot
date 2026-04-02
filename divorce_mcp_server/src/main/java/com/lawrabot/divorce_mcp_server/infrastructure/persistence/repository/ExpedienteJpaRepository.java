@@ -7,6 +7,7 @@ import com.lawrabot.divorce_mcp_server.infrastructure.persistence.entity.Expedie
 import com.lawrabot.divorce_mcp_server.infrastructure.persistence.mapper.ExpedienteMapper;
 import com.lawrabot.divorce_mcp_server.infrastructure.persistence.repository.jpa.SpringDataExpedienteRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
 import java.util.List;
@@ -29,6 +30,7 @@ public class ExpedienteJpaRepository implements IExpedienteRepository {
     }
 
     @Override
+    @Transactional
     public Expediente save(Expediente expediente) {
         ExpedienteJpaEntity entity = mapper.toEntity(expediente);
         ExpedienteJpaEntity saved = springDataRepository.save(entity);
@@ -36,11 +38,13 @@ public class ExpedienteJpaRepository implements IExpedienteRepository {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Optional<Expediente> findById(UUID id) {
-        return springDataRepository.findById(id).map(mapper::toDomain);
+        return springDataRepository.findByIdWithChildren(id).map(mapper::toDomain);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Optional<Expediente> findActiveByClientPhone(String phoneNumber) {
         // Un expediente se considera "activo" si no está cerrado
         List<ExpedienteStatusEnum> activeStatuses = Arrays.asList(
@@ -50,6 +54,19 @@ public class ExpedienteJpaRepository implements IExpedienteRepository {
         );
         
         return springDataRepository.findFirstByContactPhoneNumberPhoneNumberAndStatusIn(phoneNumber, activeStatuses)
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Expediente> findActiveByDni(String dni) {
+        List<ExpedienteStatusEnum> activeStatuses = Arrays.asList(
+            ExpedienteStatusEnum.BLSG_PRECONSULTA,
+            ExpedienteStatusEnum.IN_DATA_COLLECTION_PROGRESS,
+            ExpedienteStatusEnum.DATA_COMPLETE
+        );
+        
+        return springDataRepository.findFirstByDniAndStatusIn(dni, activeStatuses)
                 .map(mapper::toDomain);
     }
 }

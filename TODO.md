@@ -1,7 +1,7 @@
 # LawraBot - Lista de Tareas
 
 > Tareas pendientes y en progreso del proyecto LawraBot.
-> Actualizado: 27 de Marzo de 2026
+> Actualizado: 2 de Abril de 2026
 
 ---
 
@@ -11,44 +11,36 @@
 - [x] **Expediente.java** - Entidad principal con Lombok
   - [x] Refactorizar con anotaciones Lombok
   - [x] Agregar comentarios explicativos en español
-  - [ ] Agregar campos adicionales según PRD (juzgado, fecha presentación, etc.)
+  - [x] Agregar campos adicionales según PRD (juzgado, fecha presentación, etc.)
 
-- [ ] **Conyuge.java** - Entidad de cónyuge
-  - [ ] Crear clase con Lombok
-  - [ ] Campos: nombre, apellido, DNI, domicilio, ocupación, email
-  - [ ] Relación con Expediente
+- [x] **Spouse.java** - Entidad de cónyuge
+  - [x] Crear clase con Lombok
+  - [x] Campos: nombre, apellido, DNI, domicilio, ocupación, email
+- [x] **Matrimonio / Detalles** - Integrado en Expediente
+- [x] **Child.java** - Entidad de hijos/as
+  - [x] Crear clase con Lombok
+  - [x] Campos: nombre, fechaNacimiento, DNI (opcional)
 
-- [ ] **Matrimonio.java** - Entidad de matrimonio
-  - [ ] Crear clase con Lombok
-  - [ ] Campos: fechaMatrimonio, lugarMatrimonio, regimenMatrimonial
-  - [ ] Relación con Expediente
-
-- [ ] **Hijo.java** - Entidad de hijos/as
-  - [ ] Crear clase con Lombok
-  - [ ] Campos: nombre, fechaNacimiento, DNI (opcional)
-  - [ ] Relación con Expediente
-
-- [ ] **Acuerdo.java** - Entidad de acuerdos
-  [ ] Crear clase con Lombok
-  - [ ] Campos: tipoAcuerdo, descripcion, monto (si aplica)
-  - [ ] Relación con Expediente
-
-- [ ] **Value Objects**
-  - [ ] PhoneNumberVO - Validación de números argentinos
-  - [ ] DNIVO - Validación de DNI argentino
-  - [ ] MoneyVO - Para montos de dinero
+- [x] **RegulatoryAgreement.java** - Entidad de acuerdos
+  - [x] Crear clase con Lombok
+  - [x] Campos: tipoAcuerdo, descripcion, monto (si aplica)
+- [x] **SocioEconomicProfile.java** - Perfil para BLSG
+- [x] **Value Objects**
+  - [x] PhoneNumberVO - Validación de números argentinos
+  - [x] DNIVO - Validación de DNI argentino
+  - [x] AddressVO / FullNameVO / CuilVO
 
 ### MCP Tools (Java)
-- [ ] **ExpedienteTools**
-  - [ ] `crear_expediente` - Crear nuevo expediente post-BLSG
-  - [ ] `obtener_estado_caso` - Consultar estado actual
-  - [ ] `obtener_datos_faltantes` - Validar datos incompletos
+- [x] **ExpedienteTools [LISTO]**
+  - [x] `start_divorce_process` - Iniciar trámite
+  - [x] `get_dossier_stage` - Consultar etapa actual
+  - [x] `validate_agreement_legality` - Validación legal (Sanity Check)
 
-- [ ] **Data Collection Tools**
-  - [ ] `registrar_datos_conyuge` - Guardar datos de cónyuges
-  - [ ] `registrar_datos_matrimonio` - Guardar datos del matrimonio
-  - [ ] `registrar_datos_hijos` - Guardar datos de hijos/as
-  - [ ] `registrar_acuerdos` - Guardar acuerdos entre partes
+- [x] **Data Collection Tools [LISTO]**
+  - [x] `submit_marriage_details` - Registro de matrimonio
+  - [x] `submit_children_info` - Registro de hijos
+  - [x] `submit_socioeconomic_info` - Info para BLSG
+  - [x] `draft_regulatory_agreement` - Borrador de acuerdo
 
 - [ ] **BLSG Integration**
   - [ ] `consultar_blsg` - Consultar Beneficio de Litigar Sin Gastos
@@ -117,32 +109,40 @@
 - [x] **README.md** - Instrucciones de setup
 - [x] **API Documentation** - MCP Tools (OpenAPI/Swagger)
 - [x] **User Guide** - Cómo usar el bot (para usuarios finales)
-- [ ] **ADRs** - Mantener registro de decisiones arquitectónicas
+- [x] **ADRs** - Mantener registro de decisiones arquitectónicas
   - [x] Configurar adr-log para actualización automática de index.md
-  - [ ] Crear ADR-0003: Base de datos (PostgreSQL + PGVector)
-  - [ ] Crear ADR-0004: Framework de testing (JUnit 5 + Vitest)
-  - [ ] Crear ADR-0005: Estrategia de RAG para normativa legal
+  - [x] Crear ADR-0003: Arquitectura reactiva (WebFlux/ASYNC) para estabilidad MCP
+  - [ ] Crear ADR-0004: Base de datos (PostgreSQL + PGVector)
+  - [ ] Crear ADR-0005: Framework de testing (JUnit 5 + Vitest)
+  - [ ] Crear ADR-0006: Estrategia de RAG para normativa legal
+
+---
+
+---
+
+## 🏛️ Fase 2: MCI & Operations Center (EN PROGRESO)
+
+### Master Client Index (Java)
+- [ ] **Citizen.java** - Entidad de identidad única (DNI/CUIL)
+- [ ] **CaseParticipant.java** - Mapeo de ciudadanos a expedientes (Roles)
+- [ ] **CitizenIntervention.java** - Historial de intervenciones con tiers de privacidad
+- [ ] **MciTools.java** - Herramientas MCP para búsqueda y gestión de ciudadanos
+
+### Learning Loop (Java/Agent)
+- [ ] **CorrectionFeedback.java** - Entidad para registrar correcciones del operador
+- [ ] **Scheduled Task** - Anonimización de datos (6 meses)
+- [ ] **Extraction Prompt** - Inyectar Few-Shot examples desde el repositorio de feedback
+
+### Operations Center (Next.js)
+- [x] **Design Archetype** - Implementar Ethereal Glass / Double-Bezel
+- [x] **Divorce Workspace** - Layout de 3 paneles (Casos, Chat, Expediente)
+- [ ] **MCP Connector** - Integrar frontend con servidores MCP vía SSE/REST
+- [ ] **Data Editor** - Panel para corrección rápida de datos (trigger para feedback)
+- [ ] **MCI Explorer** - Interfaz de búsqueda de ciudadanos con RBAC
 
 ---
 
 ## 🔮 Prioridad Baja / Futuro
-
-### Features Adicionales
-- [ ] **Observaciones** - `registrar_observacion`, `obtener_observaciones_pendientes`
-- [ ] **PDF Processing** - `procesar_documento_pdf` (OCR para documentos subidos)
-- [ ] **Notificaciones** - Recordatorios de vencimientos
-- [ ] **Dashboard** - Panel web para administradores
-- [ ] **Analytics** - Métricas de uso del bot
-
-### Mejoras Técnicas
-- [ ] **Rate Limiting** - Protección contra abuso
-- [ ] **i18n** - Soporte multiidioma (español formal vs informal)
-- [ ] **A/B Testing** - Probar diferentes flujos de conversación
-- [ ] **Caching** - Cache de respuestas MCP
-
----
-
-## 🐛 Issues Conocidos / Bugs
 
 - [ ] **BLSG Scraping** - Necesita confirmar que el sitio permite scraping
 - [ ] **Baileys** - WhatsApp puede requerir re-autenticación periódica
@@ -152,14 +152,12 @@
 
 ## ✅ Completado Recientemente
 
-- [x] Configurar Lombok en pom.xml
-- [x] Crear estructura base del proyecto
-- [x] Configurar Docker Compose (PostgreSQL, Redis)
-- [x] Crear Expediente.java con Lombok
-- [x] Documentar anotaciones Lombok en español
-- [x] Configurar sistema de ADRs con adr-log
-- [x] Crear ADR-0001: Uso de Lombok
-- [x] Crear ADR-0002: Uso de MCP
+- [x] Estabilizar null-safety en Expediente y Mappers (Fase 3a)
+- [x] Implementar servidor MCP con transporte SSE en Java (Fase 3b)
+- [x] Exponer 8 UseCases legales como herramientas MCP (Fase 3c)
+- [x] Validar conectividad E2E con cliente de prueba Node (Fase 3d)
+- [x] Corregir tipos de datos y corrupción en controlador MCP (Fase 3e)
+- [x] Refactorizar a WebFlux/ASYNC para eliminar timeouts de 60s (Fase 4 - Estabilización de Conectividad)
 
 ---
 
@@ -182,10 +180,10 @@
 
 ## 📊 Estadísticas
 
-- **Entidades Java creadas**: 1/6
-- **MCP Tools implementados**: 0/12
-- **Specs del agente**: 0/1
-- **Tests escritos**: 0/
+- **Entidades Java creadas**: 6/6 (Completas)
+- **MCP Tools implementados**: 8/12 (Base legal lista)
+- **Specs del agente**: 0/1 (Próximo paso)
+- **Tests escritos**: 5/ (Mappers + Mocks)
 
 ---
 

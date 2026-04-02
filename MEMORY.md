@@ -1,7 +1,7 @@
 # LawraBot - Memoria del Proyecto
 
 > Archivo de referencia rápida con información clave sobre el proyecto.
-> Actualizado: 27 de Marzo de 2026
+> Actualizado: 29 de Marzo de 2026
 
 ---
 
@@ -63,15 +63,12 @@ lawrabot/
 ├── divorce_mcp_server/            # Backend Legal MCP
 │   └── src/main/java/
 │       └── com.lawrabot.divorce_mcp_server/
-│           ├── domain/            # Entidades de dominio
-│           │   ├── enums/
-│           │   ├── model/
-│           │   ├── valueobject/
-│           │   └── events/
-│           ├── tools/             # @McpTool anotados
-│           ├── service/           # Lógica de negocio
+│           ├── domain/            # Entidades de dominio (Expediente, Spouse, Child, etc.)
+│           ├── infrastructure/    # Adaptadores de infraestructura (MCP)
+│           ├── application/       # Puertos e interfaces de Use Cases
 │           ├── repository/        # Spring Data JPA
-│           └── integration/       # BLSG, Email
+│           └── service/           # Implementación de lógica legal
+│           └── integration/       # Email integration
 │
 ├── adr/                           # Architecture Decision Records
 │   ├── index.md                   # Índice de ADRs (auto-generado)
@@ -136,8 +133,9 @@ Las decisiones arquitectónicas importantes están documentadas en el registro A
 
 1. **ADR-0001: Lombok** - Reducir código repetitivo en entidades Java
 2. **ADR-0002: MCP** - Protocolo HTTP/SSE para comunicación agente-servidor
-3. **PGVector**: Para búsqueda semántica en documentación legal
-4. **Baileys**: Librería WhatsApp sin API oficial (limitaciones conocidas)
+3. **ADR-0003: WebFlux/ASYNC** - Arquitectura reactiva para evitar bloqueos en el stream SSE y timeouts de 60s
+4. **PGVector**: Para búsqueda semántica en documentación legal
+5. **Baileys**: Librería WhatsApp sin API oficial (limitaciones conocidas)
 
 Ver todos los ADRs en: `adr/index.md`
 

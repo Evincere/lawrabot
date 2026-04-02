@@ -28,6 +28,20 @@ public class SocioEconomicProfile {
     private BlsgScrapingResultEnum scrapingResult;
     @Nullable
     private String scrapingJustification;
+    @Nullable
+    private String fullName;
+    @Nullable
+    private String dni;
+    @Nullable
+    private String cuil;
+    @Nullable
+    private String birthDate;
+    @Nullable
+    private String province;
+    @Nullable
+    private String sex;
+    @Nullable
+    private String certificatePath;
 
     // FASE 2: Recolección Activa (WhatsApp)
     @Nullable
@@ -56,9 +70,16 @@ public class SocioEconomicProfile {
                 .build();
     }
 
-    public void updateScrapingResult(BlsgScrapingResultEnum result, String justification) {
+    public void updateScrapingResult(BlsgScrapingResultEnum result, String justification, String fullName, String dni, String cuil, String birthDate, String province, String sex, String certificatePath) {
         this.scrapingResult = result;
         this.scrapingJustification = justification;
+        this.fullName = fullName;
+        this.dni = dni;
+        this.cuil = cuil;
+        this.birthDate = birthDate;
+        this.province = province;
+        this.sex = sex;
+        this.certificatePath = certificatePath;
     }
 
     public void submitEvaluation(BigDecimal income, HousingSituationEnum housing, Integer vehicles, boolean employment) {

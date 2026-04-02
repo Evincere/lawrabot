@@ -4,6 +4,7 @@ import type { Logger } from "../utils/logger.js";
 import type { ChannelAdapter } from "../channels/types.js";
 import { SessionManager } from "../sessions/manager.js";
 import { ToolRegistry } from "../tools/registry.js";
+import { MCPManager } from "../tools/mcp.js";
 import { HookRunner } from "../hooks/runner.js";
 import { createLLMProvider } from "../llm/router.js";
 import { createMessageRouter } from "./message-router.js";
@@ -45,6 +46,7 @@ export async function startGateway(opts: GatewayOptions): Promise<GatewayServer>
   );
 
   const toolRegistry = new ToolRegistry(log);
+  const mcpManager = new MCPManager(log);
   const hookRunner = new HookRunner(log);
   const llmProvider = createLLMProvider(config.llm, log);
 
@@ -54,6 +56,14 @@ export async function startGateway(opts: GatewayOptions): Promise<GatewayServer>
 
   // ─── 4. Register Domain Tools from Specialization ──────────
   toolRegistry.registerAll(spec.tools);
+
+  // ─── 4b. Register MCP Tools from External Servers ──────────
+  for (const serverConfig of config.mcpServers) {
+    if (serverConfig.enabled) {
+      const mcpTools = await mcpManager.connectServer(serverConfig);
+      toolRegistry.registerAll(mcpTools);
+    }
+  }
 
   log.info(`Tool registry: ${toolRegistry.size} tools (${toolRegistry.list().join(", ")})`);
 
@@ -134,6 +144,7 @@ export async function startGateway(opts: GatewayOptions): Promise<GatewayServer>
         await channel.stop();
         log.info(`Channel "${id}" stopped`);
       }
+      await mcpManager.shutdown();
       httpServer.close();
       log.info("Gateway shut down complete");
     },

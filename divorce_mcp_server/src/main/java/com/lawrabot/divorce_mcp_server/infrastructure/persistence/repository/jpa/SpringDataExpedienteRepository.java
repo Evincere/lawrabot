@@ -12,8 +12,19 @@ import java.util.UUID;
 
 public interface SpringDataExpedienteRepository extends JpaRepository<ExpedienteJpaEntity, UUID> {
 
-    @Query("SELECT e FROM ExpedienteJpaEntity e WHERE e.contactPhoneNumber.phoneNumber = :phone AND e.status IN :statuses ORDER BY e.createdAt DESC LIMIT 1")
+    @Query("SELECT e FROM ExpedienteJpaEntity e LEFT JOIN FETCH e.children WHERE e.contactPhoneNumber.phoneNumber = :phone AND e.status IN :statuses ORDER BY e.createdAt DESC LIMIT 1")
     Optional<ExpedienteJpaEntity> findFirstByContactPhoneNumberPhoneNumberAndStatusIn(
             @Param("phone") String phone,
+            @Param("statuses") List<ExpedienteStatusEnum> statuses);
+
+    @Query("SELECT e FROM ExpedienteJpaEntity e LEFT JOIN FETCH e.children WHERE e.id = :id")
+    Optional<ExpedienteJpaEntity> findByIdWithChildren(@Param("id") UUID id);
+
+    @Query("SELECT e FROM ExpedienteJpaEntity e LEFT JOIN FETCH e.children WHERE e.contactPhoneNumber.phoneNumber = :phone ORDER BY e.createdAt DESC LIMIT 1")
+    Optional<ExpedienteJpaEntity> findFirstByPhone(@Param("phone") String phone);
+
+    @Query("SELECT e FROM ExpedienteJpaEntity e LEFT JOIN FETCH e.children WHERE e.socioEconomicProfile.dni = :dni AND e.status IN :statuses ORDER BY e.createdAt DESC LIMIT 1")
+    Optional<ExpedienteJpaEntity> findFirstByDniAndStatusIn(
+            @Param("dni") String dni,
             @Param("statuses") List<ExpedienteStatusEnum> statuses);
 }

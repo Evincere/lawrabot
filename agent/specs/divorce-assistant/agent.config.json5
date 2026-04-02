@@ -1,0 +1,27 @@
+{
+  name: "LawraBot - MPD Mendoza",
+  description: "Asistente legal para trámites de divorcio del Ministerio Público de la Defensa.",
+  port: 18789,
+  whatsapp: {
+    enabled: true,
+    authDir: ".data/whatsapp-auth-divorce-mendoza",
+  },
+  llm: {
+    provider: "ollama",
+    model: "qwen3.5:cloud",
+    baseUrl: "https://ollama.com", // Endpoint oficial para Ollama Cloud
+    apiKey: "4dd28d78474741e2bf1914be01cb1f77.Skb86hog_uTneKPhlsI8fRr8", // Reemplazar con el Token de ollama.com/settings/keys
+    temperature: 0.1,
+  },
+  sessions: {
+    persistDir: ".data/sessions-divorce",
+    maxHistoryMessages: 40,
+  },
+  mcpServers: [
+    {
+      name: "LawraBot-Legal-Server",
+      url: "http://localhost:8081/mcp/sse",
+      enabled: true,
+    },
+  ],
+}

@@ -25,4 +25,9 @@ public interface IExpedienteRepository {
      * expediente activo ("en borrador") de un número de teléfono / usuario.
      */
     Optional<Expediente> findActiveByClientPhone(String phoneNumber);
+
+    /**
+     * Busca un expediente activo vinculado a un DNI específico (sea peticionante o socioeconómico).
+     */
+    Optional<Expediente> findActiveByDni(String dni);
 }

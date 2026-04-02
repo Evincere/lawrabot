@@ -69,6 +69,11 @@ export class WhatsAppAdapter implements ChannelAdapter {
       for (const msg of m.messages) {
         if (!msg.message || msg.key.fromMe) continue;
 
+        // Mark message as read (blue checks)
+        this.socket?.readMessages([msg.key]).catch((err) => {
+          this.log.error(`Failed to mark message as read: ${err.message}`);
+        });
+
         const text = this.extractText(msg);
         if (!text) continue;
 
@@ -110,6 +115,20 @@ export class WhatsAppAdapter implements ChannelAdapter {
     } else {
       await this.socket.sendMessage(to, { text: payload.text });
     }
+  }
+
+  async sendPresence(to: string, type: "typing" | "recording" | "available" | "paused"): Promise<void> {
+    if (!this.socket) return;
+
+    const presenceMap: Record<string, any> = {
+      typing: "composing",
+      recording: "recording",
+      available: "available",
+      paused: "paused",
+    };
+
+    const baileyType = presenceMap[type] || "composing";
+    await this.socket.sendPresenceUpdate(baileyType, to);
   }
 
   private extractText(msg: proto.IWebMessageInfo): string | null {

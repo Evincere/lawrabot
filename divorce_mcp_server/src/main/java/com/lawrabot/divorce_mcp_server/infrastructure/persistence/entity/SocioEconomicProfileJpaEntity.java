@@ -37,6 +37,27 @@ public class SocioEconomicProfileJpaEntity {
     @Column(name = "scraping_justification", columnDefinition = "TEXT")
     private String scrapingJustification;
 
+    @Column(name = "full_name", length = 255)
+    private String fullName;
+
+    @Column(name = "dni", length = 255)
+    private String dni;
+
+    @Column(name = "cuil", length = 255)
+    private String cuil;
+
+    @Column(name = "birth_date", length = 255)
+    private String birthDate;
+
+    @Column(name = "province", length = 255)
+    private String province;
+
+    @Column(name = "sex", length = 255)
+    private String sex;
+
+    @Column(name = "certificate_path", length = 1000)
+    private String certificatePath;
+
     // --- FASE 2: DEFENSORÍA ---
     @Column(name = "monthly_income_ars", precision = 15, scale = 2)
     private BigDecimal monthlyIncomeArs;

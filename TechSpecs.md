@@ -6,37 +6,35 @@
 
 ---
 
-## 1. Arquitectura General
+## 1. Arquitectura General (Hub-and-Spoke)
 
-LawraBot se compone de dos servicios principales que se comunican mediante el **Model Context Protocol (MCP)**:
+LawraBot opera como un ecosistema modular donde un **Core Central** gestiona la identidad del ciudadano y el aprendizaje, mientras que **Agentes Especializados** (Spokes) gestionan la lógica legal de cada trámite.
 
 ```mermaid
-graph LR
-    subgraph Canal
-        WA[WhatsApp Business API]
-    end
-    subgraph Agente Frontend
-        A[TemplateClaw - Node.js/TypeScript]
-    end
-    subgraph Backend Legal - MCP Server
-        B[Spring Boot + Spring AI]
-        C[PostgreSQL + PGVector]
-        D[Redis]
-    end
-    subgraph Integraciones Externas
-        E[Ollama Cloud - LLM]
-        BLSG[BLSG PJM - blsg.pjm.gob.ar]
-        EMAIL[Servicio de Email]
+graph TD
+    subgraph Canales
+        WA[WhatsApp - Baileys]
+        Web[Operations Center - Next.js]
     end
 
-    WA <-->|Mensajes| A
-    A <-->|MCP Tools| B
-    B <-->|Embeddings + RAG| C
-    B <-->|Sesiones| D
-    A <-->|Chat Completion| E
-    B <-->|Chat Interno| E
-    B -->|Consulta DNI/Nombre| BLSG
-    B -->|Confirmación post-presentación| EMAIL
+    subgraph "Hub Central (Core)"
+        MCI[Master Client Index]
+        LL[Learning Loop]
+        RBAC[Auth & Privacy Tiers]
+    end
+
+    subgraph "Spokes (Servidores MCP)"
+        Divorce[Divorce MCP Server]
+        Succ[Succession MCP Server - Futuro]
+        Alimony[Alimony MCP Server - Futuro]
+    end
+
+    WA <-->|MCP Tools| Divorce
+    Web <-->|MCP Tools/API| MCI
+    Web <-->|Control| Divorce
+    Divorce <-->|Query/Store| MCI
+    Divorce -->|Feedback| LL
+    LL -->|Few-Shot| Divorce
 ```
 
 ---
@@ -50,7 +48,7 @@ graph LR
 | Runtime | Node.js | 20+ LTS | Ejecución del agente |
 | Lenguaje | TypeScript | 5.x | Tipado estricto |
 | Framework del Agente | TemplateClaw (propio) | — | Orquestación de flujo conversacional |
-| Canal de Mensajería | WhatsApp Business API | — | Comunicación con usuarios |
+| Canal de Mensajería | WhatsApp Multi-Device (Baileys) | latest | Comunicación con usuarios sin requerir API oficial |
 | Cliente MCP | @modelcontextprotocol/sdk | latest | Consumo de herramientas del backend |
 | Validación | Zod | latest | Validación de configuración |
 | Logger | Pino | latest | Logs estructurados |
@@ -62,8 +60,9 @@ graph LR
 | Framework | Spring Boot | 3.5.12 | Base del servidor |
 | IA Framework | Spring AI | 1.1.3 | Integración con LLMs y RAG |
 | Servidor MCP | spring-ai-starter-mcp-server-webmvc | (BOM) | Exposición de herramientas vía MCP |
-| Proveedor LLM | spring-ai-starter-model-openai | (BOM) | Bridge hacia Ollama Cloud |
-| Vector Store | spring-ai-starter-vector-store-pgvector | (BOM) | Almacenamiento de embeddings legales |
+| Proveedor LLM Chat | spring-ai-starter-model-openai | (BOM) | Bridge hacia Ollama Cloud |
+| Embeddings (Local) | spring-ai-starter-model-transformers | (BOM) | Generación local de vectores (ONNX/HuggingFace) |
+| Vector Store | spring-ai-starter-vector-store-pgvector | (BOM) | Almacenamiento persistente de vectores |
 | ORM | Spring Data JPA + Hibernate | (Boot) | Persistencia de expedientes |
 | Browser Automation | Playwright for Java | latest | Automatización de consulta BLSG (blsg.pjm.gob.ar) |
 | PDF Processing | Apache PDFBox | latest | Extracción de texto y datos de PDFs recibidos |
@@ -72,11 +71,21 @@ graph LR
 | Utilidades | Lombok | latest | Reducción de boilerplate |
 | Java | OpenJDK | 21 | Runtime |
 
-### 2.3 Infraestructura
+### 2.3 Centro de Operaciones (Admin Dashboard)
+
+| Componente | Tecnología | Versión | Propósito |
+|---|---|---|---|
+| Framework | Next.js (App Router) | 14.x | Frontend del Centro de Control |
+| Estilos | Tailwind CSS + v4 | latest | Diseño premium / Dark Mode |
+| Animaciones | Framer Motion | latest | Feedback táctil y micro-interacciones |
+| Iconos | Phosphor Icons | latest | Set iconográfico consistente |
+| Cliente MCP | Custom SSE Hub | — | Conexión con servidores MCP |
+
+### 2.4 Infraestructura
 
 | Componente | Tecnología | Puerto | Propósito |
 |---|---|---|---|
-| Base de Datos | PostgreSQL 17 + PGVector | 5432 | Expedientes + Vector Store |
+| Base de Datos | PostgreSQL 17 + PGVector | 5433 | Expedientes + Vector Store (Docker Map) |
 | Caché/Sesiones | Redis Alpine | 6379 | Estado de conversaciones |
 | Admin DB | Adminer | 8082 | UI para gestión de datos |
 | Admin Redis | RedisInsight | 8001 | UI para inspección de sesiones |
@@ -187,107 +196,44 @@ graph LR
 
 ## 4. Modelo de Datos (PostgreSQL)
 
-### 4.1 Entidades Principales
+### 4.1 Entidades de Identidad (MCI)
 
 ```mermaid
 erDiagram
-    EXPEDIENTE {
+    CITIZEN {
         uuid id PK
-        string telefono_contacto
-        string tipo_divorcio
-        string estado
-        string email_contacto
-        timestamp fecha_creacion
-        timestamp fecha_actualizacion
-    }
-    CONYUGE {
-        uuid id PK
-        uuid expediente_id FK
-        int numero_conyuge
-        string nombre_completo
-        string dni
+        string dni UNIQUE
         string cuil
-        string domicilio
-        date fecha_nacimiento
-        string genero
-        string profesion
+        string full_name
+        string current_address
+        timestamp updated_at
     }
-    MATRIMONIO {
+    CASE_PARTICIPANT {
         uuid id PK
-        uuid expediente_id FK
-        date fecha_matrimonio
-        string lugar_matrimonio
-        string numero_acta
-        string ultimo_domicilio_conyugal
-        string departamento_domicilio
+        uuid citizen_id FK
+        uuid case_id FK
+        string role "PETITIONER, RESPONDENT, HEIR, etc."
     }
-    HIJO {
+    CITIZEN_INTERVENTION {
         uuid id PK
-        uuid expediente_id FK
-        string nombre_completo
-        string dni
-        date fecha_nacimiento
+        uuid citizen_id FK
+        string procedure_type
+        string sensitivity_tier "GENERAL, RESTRICTED, HIGHLY_SENSITIVE"
+        string summary_redacted
+        text full_details_encrypted
     }
-    ACUERDO {
+    CORRECTION_FEEDBACK {
         uuid id PK
-        uuid expediente_id FK
-        string tipo
-        text descripcion
-    }
-    CONSTANCIA_BLSG {
-        uuid id PK
-        uuid expediente_id FK
-        uuid conyuge_id FK
-        string resultado
-        string url_constancia_pdf
-        timestamp fecha_consulta
-    }
-    DOCUMENTO_DIGITAL {
-        uuid id PK
-        uuid expediente_id FK
-        string tipo_documento
-        string nombre_archivo
-        string url_archivo
-        text texto_extraido
-        string origen
-        timestamp fecha_carga
-    }
-    DOCUMENTO_GENERADO {
-        uuid id PK
-        uuid expediente_id FK
-        string tipo_documento
-        string url_archivo
-        timestamp fecha_generacion
-    }
-    OBSERVACION {
-        uuid id PK
-        uuid expediente_id FK
-        string mensaje
-        string campos_afectados
-        string estado
-        timestamp fecha_creacion
-        timestamp fecha_resolucion
-    }
-    NOTIFICACION {
-        uuid id PK
-        uuid expediente_id FK
-        string tipo
-        string canal
-        string destinatario
-        string estado
-        timestamp fecha_envio
+        string field_name
+        text original_text
+        text ai_value
+        text human_value
+        timestamp expires_at
     }
 
-    EXPEDIENTE ||--o{ CONYUGE : tiene
-    EXPEDIENTE ||--o| MATRIMONIO : registra
-    EXPEDIENTE ||--o{ HIJO : tiene
-    EXPEDIENTE ||--o{ ACUERDO : incluye
-    EXPEDIENTE ||--o{ CONSTANCIA_BLSG : tramita
-    EXPEDIENTE ||--o{ DOCUMENTO_DIGITAL : recibe
-    EXPEDIENTE ||--o{ DOCUMENTO_GENERADO : genera
-    EXPEDIENTE ||--o{ OBSERVACION : revisa
-    EXPEDIENTE ||--o{ NOTIFICACION : envía
-    CONYUGE ||--o| CONSTANCIA_BLSG : asociada
+    CITIZEN ||--o{ CASE_PARTICIPANT : participa
+    CITIZEN ||--o{ CITIZEN_INTERVENTION : historia
+    CASE_PARTICIPANT ||--o| EXPEDIENTE : vinculado
 ```
 
 ### 4.2 Estados del Expediente
@@ -431,6 +377,7 @@ npm run dev -- --spec ./specs/divorce
 ### Resueltas
 
 - [x] ~~¿El sistema BLSG expone una API REST?~~ → No. Es una SPA React/Vite. Se usará **Playwright for Java** para automatizar la consulta.
+- [x] ~~¿Cómo integraremos WhatsApp sin la API oficial?~~ → Se usa **Baileys** para emular un cliente de WhatsApp Web (Multi-device), permitiendo ahorro de costos y mayor flexibilidad para el MVP.
 - [x] ~~¿Qué servidor SMTP se usará?~~ → **Gmail SMTP** (`smtp.gmail.com:587`) con App Password. Futuro: migración a SMTP institucional.
 - [x] ~~¿El bot procesa documentos digitales?~~ → Sí. Recibe y extrae contenido de **archivos PDF** usando Apache PDFBox.
 

@@ -6,9 +6,12 @@ import com.lawrabot.divorce_mcp_server.domain.enums.HousingSituationEnum;
 import com.lawrabot.divorce_mcp_server.domain.model.Expediente;
 import com.lawrabot.divorce_mcp_server.domain.model.SocioEconomicProfile;
 
+import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
 import java.util.UUID;
 
+@Transactional
 public class SubmitSocioEconomicEvaluationService implements SubmitSocioEconomicEvaluationUseCase {
 
     private final IExpedienteRepository repository;

@@ -67,6 +67,9 @@ export function createMessageRouter(deps: MessageRouterDeps) {
         config: {},
       };
 
+      // Signal "typing" to the user
+      await updatePresence(channelId, conversationId, "typing");
+
       // Agent loop: call LLM, execute tools, repeat until text reply
       let round = 0;
       while (round < MAX_TOOL_ROUNDS) {
@@ -164,6 +167,22 @@ export function createMessageRouter(deps: MessageRouterDeps) {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       log.error(`Failed to send reply on ${channelId}: ${msg}`);
+    }
+  }
+
+  async function updatePresence(
+    channelId: string,
+    conversationId: string,
+    type: "typing" | "recording" | "available" | "paused",
+  ) {
+    const channel = channels.get(channelId);
+    if (channel && channel.sendPresence) {
+      try {
+        await channel.sendPresence(conversationId, type);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        log.error(`Failed to send presence update on ${channelId}: ${msg}`);
+      }
     }
   }
 }

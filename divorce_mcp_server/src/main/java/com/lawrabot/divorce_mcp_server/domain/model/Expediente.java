@@ -124,11 +124,16 @@ public class Expediente {
     }
 
     public void processScrapingResult(BlsgScrapingResultEnum result, String observations) {
-        if (this.socioEconomicProfile == null) {
-            this.socioEconomicProfile = SocioEconomicProfile.createForScraping();
-        }
+        this.processScrapingResult(result, observations, null, null, null, null, null, null, null);
+    }
+
+    public void processScrapingResult(BlsgScrapingResultEnum result, String observations, String fullName, String dni, String cuil, String birthDate, String province, String sex, String certificatePath) {
         SocioEconomicProfile profile = this.socioEconomicProfile;
-        profile.updateScrapingResult(result, observations);
+        if (profile == null) {
+            profile = SocioEconomicProfile.createForScraping();
+            this.socioEconomicProfile = profile;
+        }
+        profile.updateScrapingResult(result, observations, fullName, dni, cuil, birthDate, province, sex, certificatePath);
         
         if (result == BlsgScrapingResultEnum.PROVISIONALLY_REJECTED) {
             this.status = ExpedienteStatusEnum.BLSG_RECHAZADO;

@@ -38,4 +38,6 @@ export interface ChannelAdapter {
   sendMessage(to: string, payload: OutboundMessage): Promise<void>;
   /** Register an inbound message handler. */
   onMessage(handler: InboundHandler): void;
+  /** Send a presence update (e.g., "typing", "recording"). */
+  sendPresence?(to: string, type: "typing" | "recording" | "available" | "paused"): Promise<void>;
 }

@@ -18,6 +18,7 @@ export const LLMConfigSchema = z.object({
   provider: z.enum(["ollama"]).default("ollama"),
   model: z.string().default("qwen3.5:cloud"),
   baseUrl: z.string().default("http://localhost:11434"),
+  apiKey: z.string().optional(),
   temperature: z.number().min(0).max(2).default(0.7),
   maxTokens: z.number().positive().default(4096),
 });
@@ -26,6 +27,13 @@ export const LLMConfigSchema = z.object({
 export const SessionsConfigSchema = z.object({
   persistDir: z.string().default(".data/sessions"),
   maxHistoryMessages: z.number().positive().default(50),
+});
+
+// ─── MCP Servers Config ──────────────────────────────────────────
+export const MCPServerConfigSchema = z.object({
+  name: z.string(),
+  url: z.string().url(),
+  enabled: z.boolean().default(true),
 });
 
 // ─── Root Config ─────────────────────────────────────────────────
@@ -37,6 +45,7 @@ export const AppConfigSchema = z.object({
   telegram: TelegramConfigSchema.default({}),
   llm: LLMConfigSchema.default({}),
   sessions: SessionsConfigSchema.default({}),
+  mcpServers: z.array(MCPServerConfigSchema).default([]),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;
@@ -44,3 +53,4 @@ export type WhatsAppConfig = z.infer<typeof WhatsAppConfigSchema>;
 export type TelegramConfig = z.infer<typeof TelegramConfigSchema>;
 export type LLMConfig = z.infer<typeof LLMConfigSchema>;
 export type SessionsConfig = z.infer<typeof SessionsConfigSchema>;
+export type MCPServerConfig = z.infer<typeof MCPServerConfigSchema>;

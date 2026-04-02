@@ -113,22 +113,23 @@ specs/my-spec/
 ```
 com.lawrabot.divorce_mcp_server/
 ├── DivorceMcpServerApplication.java    # Entry point
-├── tools/                  # @McpTool annotated methods
-├── model/                  # JPA entities (Expediente, Conyuge, Matrimonio, etc.)
+├── infrastructure/mcp/      # Implementación del servidor MCP (Controller, Config, DTOs)
+├── domain/                  # Entidades de dominio (Expediente, Spouse, Child, etc.)
+├── application/port/        # Puertos de entrada y salida (Use Cases)
 ├── repository/             # Spring Data JPA repositories
-├── service/                # Business logic
-├── integration/            # HTTP clients (BLSG browser automation, Email)
+├── service/                # Business logic (Implementación de Use Cases)
+├── integration/            # HTTP clients (Email)
 └── config/                 # Bean configuration
 ```
 
 **Planned MCP Tools:**
-- **Expediente**: `crear_expediente`, `obtener_estado_caso`, `obtener_datos_faltantes`
-- **Data Collection**: `registrar_datos_conyuge`, `registrar_datos_matrimonio`, `registrar_datos_hijos`, `registrar_acuerdos`
-- **PDF Processing**: `procesar_documento_pdf`
-- **BLSG Integration**: `consultar_blsg` (browser automation via Playwright)
-- **Document Generation**: `generar_convenio`, `generar_demanda` (Word .docx)
-- **RAG**: `consultar_normativa` (PGVector + Spring AI)
-- **Observations**: `registrar_observacion`, `obtener_observaciones_pendientes`
+- **Expediente [IMPLEMENTADO]**: `start_divorce_process`, `get_dossier_stage`, `validate_agreement_legality`
+- **Data Collection [IMPLEMENTADO]**: `submit_marriage_details`, `submit_children_info`, `submit_socioeconomic_info`, `draft_regulatory_agreement`
+- **BLSG Integration [PARCIAL]**: `process_scraping_result` (scraping real pendiente via Playwright)
+- **PDF Processing**: `procesar_documento_pdf` (pendiente)
+- **Document Generation**: `generar_convenio`, `generar_demanda` (Apache POI/Docx4j pendiente)
+- **RAG**: `consultar_normativa` (PGVector configurado, búsqueda por implementar)
+- **Observations**: `registrar_observacion`, `obtener_observaciones_pendientes` (pendiente)
 
 **Database Entities:**
 - `Expediente` (case file with states: en_progreso → datos_completos → blsg_consultado → documentos_generados → en_revision → presentado → en_tramite)

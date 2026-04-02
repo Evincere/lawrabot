@@ -20,8 +20,10 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
     "@whiskeysockets/baileys": "^6.7.16",
     "commander": "^14.0.0",
+    "eventsource": "^4.1.0",
     "express": "^5.1.0",
     "grammy": "^1.35.0",
     "jiti": "^2.4.2",

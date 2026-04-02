@@ -16,15 +16,17 @@ export class OllamaProvider implements LLMProvider {
   readonly name = "Ollama";
   private baseUrl: string;
   private model: string;
+  private apiKey?: string;
   private defaultTemp: number;
   private defaultMaxTokens: number;
 
   constructor(config: LLMConfig, private readonly log: Logger) {
     this.baseUrl = config.baseUrl.replace(/\/+$/, "");
     this.model = config.model;
+    this.apiKey = config.apiKey;
     this.defaultTemp = config.temperature;
     this.defaultMaxTokens = config.maxTokens;
-    this.log.info(`Ollama provider initialized: ${this.model} @ ${this.baseUrl}`);
+    this.log.info(`Ollama provider initialized: ${this.model} @ ${this.baseUrl} (Auth: ${this.apiKey ? "YES" : "NO"})`);
   }
 
   async complete(request: LLMCompletionRequest): Promise<LLMCompletionResponse> {
@@ -50,9 +52,17 @@ export class OllamaProvider implements LLMProvider {
 
     this.log.debug(`Sending request to Ollama: ${this.model}`);
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (this.apiKey) {
+      headers["Authorization"] = `Bearer ${this.apiKey}`;
+    }
+
     const response = await fetch(`${this.baseUrl}/api/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(body),
     });
 

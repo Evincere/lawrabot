@@ -24,30 +24,35 @@ public class CreateDivorceDossierService implements CreateDivorceDossierUseCase 
 
     @Override
     public Expediente execute(String clientPhone, String firstName, String lastName) {
-        // 1. Verificamos que no haya ya un expediente activo para este número
-        // Esto previene que el chatbot cree 10 expedientes si el usuario dice "Hola" 10 veces.
-        expedienteRepository.findActiveByClientPhone(clientPhone)
-                .ifPresent(exp -> {
-                    throw new IllegalStateException("Ya existe un trámite de divorcio activo para este número de WhatsApp (" + exp.getId() + ").");
-                });
+        // 1. Buscamos si existe un expediente activo.
+        // Si ya pasó la etapa de BLSG_PRECONSULTA, lanzamos error. Si está en BLSG_PRECONSULTA, lo reutilizamos.
+        Expediente expediente = expedienteRepository.findActiveByClientPhone(clientPhone).orElse(null);
 
-        // 2. Usando la fábrica de Dominio para el Expediente
-        // Por defecto asumimos UNILATERAL hasta que el bot determine lo contrario
-        Expediente nuevoExpediente = Expediente.createNew(PhoneNumberVO.of(clientPhone), com.lawrabot.divorce_mcp_server.domain.enums.DivorceTypeEnum.UNILATERAL);
+        if (expediente != null) {
+            if (expediente.getStatus() != com.lawrabot.divorce_mcp_server.domain.enums.ExpedienteStatusEnum.BLSG_PRECONSULTA) {
+                throw new IllegalStateException("Ya existe un trámite de divorcio activo para este celular (" + expediente.getId() + ").");
+            }
+        } else {
+            // Si el BLSG no se usó por algún motivo, lo creamos de cero
+            expediente = Expediente.createNew(PhoneNumberVO.of(clientPhone), com.lawrabot.divorce_mcp_server.domain.enums.DivorceTypeEnum.UNILATERAL);
+        }
 
-        // 3. Crear el Cónyuge Peticionante usando la lógica de Dominio
+        // 2. Crear o actualizar el Cónyuge Peticionante usando la lógica de Dominio
         Spouse petitioner = Spouse.builder()
                 .id(java.util.UUID.randomUUID())
                 .name(new FullNameVO(firstName, lastName))
                 .phoneNumber(PhoneNumberVO.of(clientPhone))
+                // Si el DNI ya estuviera, lo pasaríamos, pero start_divorce_process no lo recibe. El DNI queda en el SocioEconomicProfile.
                 .build();
         
-        // 4. Conectamos y guardamos (Idealmente dentro de una transacción en otra capa superior)
-        nuevoExpediente.setPetitioner(petitioner);
+        // 3. Conectamos y guardamos
+        expediente.setPetitioner(petitioner);
+        
+        // Actualizamos estado a la siguiente fase
+        expediente.updateCollectionStage(com.lawrabot.divorce_mcp_server.domain.enums.DataCollectionStageEnum.PENDING_SOCIOECONOMIC_EVALUATION);
 
-        // Guardar primero el spouse por constraints de BD, o depender del cascade.
-        // Asumiendo que Repository maneja esto, guardamos el agregate root.
         spouseRepository.save(petitioner);
-        return expedienteRepository.save(nuevoExpediente);
+        return expedienteRepository.save(expediente);
+
     }
 }

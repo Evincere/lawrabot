@@ -1,8 +1,8 @@
-# PRD — LawraBot: Asistente Legal para Divorcios por WhatsApp
+# PRD — LawraBot: Ecosistema de Operaciones Legales Inteligentes
 
-> **Estado:** Versión v1.0 — Aprobado para implementación
-> **Fecha:** 2026-03-26
-> **Autor:** Equipo LawraBot
+> **Estado:** Versión v2.0 — Evolución a Ecosistema de Agentes
+> **Fecha:** 2026-04-02
+> **Autor:** Equipo LawraBot / Antigravity
 > **Organismo:** Ministerio Público de la Defensa — Provincia de Mendoza
 
 ---
@@ -29,21 +29,22 @@
 
 ## 1. Visión del Producto
 
-LawraBot es un asistente legal automatizado de propiedad del Ministerio Público de la Defensa en Mendoza, Argentina que atiende a personas por **WhatsApp** para guiarlas en el proceso de inicio de **divorcio de mutuo acuerdo o unilateral** en Argentina, como parte del servicio gratuito de la Defensa para personas con escasos recursos económicos que obtengan el Beneficio de Litigar Sin Gastos (BLSG). El bot orienta, recopila datos, y genera borradores del **Convenio Regulador de Efectos del Divorcio** y de la **Demanda de Divorcio**, escritos de mero trámite y otros escritos relacionados con el divorcio, también permite el seguimiento del trámite, todo ello bajo la supervisión humana de un abogado.
+LawraBot evoluciona de un asistente de divorcios a un **Ecosistema de Operaciones Legales** del Ministerio Público de la Defensa. El sistema utiliza una arquitectura de **Agentes Especializados** coordinados por un **Centro de Operaciones (Dashboard)** centralizado.
+
+El núcleo del sistema es el **Master Client Index (MCI)**, que centraliza la historia de intervención de cada ciudadano, permitiendo que múltiples agentes (Divorcio, Alimento, Sucesiones) compartan conocimiento y contexto de manera segura y eficiente.
 
 ### 1.1 Problema que Resuelve
 
-- Las personas que quieren iniciar un divorcio no saben por dónde empezar ni qué datos necesitan.
-- Los profesionales del derecho pierden horas en la "toma de datos" inicial (intake) que es repetitiva.
-- El acceso a orientación legal básica está limitado por horarios y costos de consulta.
-- El seguimiento del trámite es engorroso y poco transparente.
-- La tramitación del Beneficio de Litigar Sin Gastos (BLSG) agrega pasos manuales al proceso.
+- **Fragmentación de Datos**: La información de los ciudadanos se encuentra dispersa entre diferentes tipos de trámites.
+- **Carga de Intake**: Los profesionales pierden tiempo en tareas repetitivas de recolección de datos.
+- **Falta de Retroalimentación**: Los errores de extracción de la IA suelen repetirse por falta de un mecanismo de corrección humana persistente.
+- **Escalabilidad**: Dificultad para incorporar nuevos tipos de trámites legales sin duplicar infraestructura.
 
 ### 1.2 Propuesta de Valor
 
-- **Para el usuario final (cliente):** Acceso inmediato 24/7, guía empática paso a paso, y entrega de borradores documentales sin necesidad de una primera consulta presencial.
-- **Para el profesional del derecho:** Automatización del intake, expedientes pre-armados listos para revisar, y reducción del tiempo de elaboración documental.
-- **Para el Ministerio Público de la Defensa:** Reducción de la carga de trabajo, mejora de la eficiencia, y mayor alcance del servicio.
+- **Para el Ciudadano**: Experiencia fluida donde el sistema "recuerda" sus datos básicos entre diferentes trámites, reduciendo la fricción.
+- **Para el Operador (HITL)**: Control total a través de un Dashboard premium (High-End) que permite supervisar agentes, corregir datos y gestionar expedientes.
+- **Para la Institución**: Mejora continua de la precisión mediante un **Learning Loop** y una infraestructura modular que permite escalar a cualquier rama del derecho (Sucesiones, Alimentos, etc.).
 
 ---
 
@@ -154,22 +155,17 @@ LawraBot es un asistente legal automatizado de propiedad del Ministerio Público
   - El correo incluye un **instructivo para hacer el seguimiento** del trámite mediante el chat de WhatsApp con el agente LawraBot.
 - El usuario puede volver a escribir al bot en cualquier momento para consultar el estado de su expediente.
 
-#### F10: Canal de Observaciones del Abogado al Usuario
+### 4.2 Centro de Operaciones (Dashboard)
+El corazón del ecosistema, diseñado con estética **High-End / Ethereal Glass**:
+- **Workspace Views**: Interfaces especializadas por tipo de trámite (actualmente Divorcio).
+- **MCI Explorer**: Búsqueda y gestión de perfiles de ciudadanos con auditoría de acceso.
+- **Agent Monitoring**: Visualización en tiempo real (o diferida) de conversaciones y tareas del bot.
+- **Data Editor & Learning Trigger**: Herramienta para corregir datos extraídos por la IA, alimentando automáticamente el Learning Loop.
 
-- El operador humano de la Defensoría tiene visibilidad de los casos a través de un **dashboard**.
-- Desde el dashboard, el operador puede enviar mensajes específicos al usuario solicitando información puntual o documentación adicional.
-- El usuario responde las observaciones por el mismo canal de WhatsApp; el bot actualiza el expediente con la información corregida.
-- El flujo observaciones → corrección → re-revisión puede repetirse hasta que el abogado dé el visto bueno.
-
-### 4.2 Funcionalidades Fuera del MVP (Futuro)
-
-- [ ] Dashboard web para el abogado (ver expedientes, descargar documentos).
-- [ ] Integración con sistemas de gestión judicial.
-- [ ] Soporte para otros tipos de trámites de familia (alimentos, tenencia, régimen de visitas).
-- [ ] Firma digital de documentos.
-- [ ] Ampliación a otros departamentos de la Segunda Circunscripción (General Alvear, Malargüe).
-- [ ] Ampliación a otras circunscripciones judiciales de Mendoza.
-- [ ] Migración del servicio de email de Gmail a SMTP institucional del MPD.
+### 4.3 Master Client Index (MCI) & Learning Loop
+- **MCI**: Base de datos central de ciudadanos orientada a perfiles, no solo a expedientes.
+- **Learning Loop**: Repositorio de `CorrectionFeedback` donde se almacenan las correcciones hechas por humanos para mejorar el `few-shot extraction prompt` de los agentes.
+- **Privacidad**: Niveles de sensibilidad (`GENERAL`, `RESTRICTED`, `HIGHLY_SENSITIVE`) y mecanismo "Break the Glass".
 
 ---
 
@@ -468,6 +464,7 @@ He extraído la siguiente información:
 | RNF-S02 | Sanitización de logs | Logs nunca contienen datos personales en texto plano |
 | RNF-S03 | Autenticación MCP | Servidor MCP solo acepta conexiones de IPs autorizadas |
 | RNF-S04 | Seguridad WhatsApp | Validar número de teléfono como identificador único |
+| RNF-S05 | Privacidad de IA Local | Los embeddings de documentos legales se procesan localmente (HuggingFace/ONNX) para garantizar que los datos sensibles no salgan del control del MPD. |
 
 ### Disponibilidad y Performance
 
