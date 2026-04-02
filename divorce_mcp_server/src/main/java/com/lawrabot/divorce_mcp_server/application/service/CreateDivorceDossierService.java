@@ -1,31 +1,47 @@
 package com.lawrabot.divorce_mcp_server.application.service;
 
 import com.lawrabot.divorce_mcp_server.application.port.in.CreateDivorceDossierUseCase;
+import com.lawrabot.divorce_mcp_server.application.port.out.ICitizenRepository;
 import com.lawrabot.divorce_mcp_server.application.port.out.IExpedienteRepository;
-import com.lawrabot.divorce_mcp_server.application.port.out.ISpouseRepository;
+import com.lawrabot.divorce_mcp_server.domain.enums.CaseRole;
+import com.lawrabot.divorce_mcp_server.domain.model.CaseParticipant;
+import com.lawrabot.divorce_mcp_server.domain.model.Citizen;
 import com.lawrabot.divorce_mcp_server.domain.model.Expediente;
-import com.lawrabot.divorce_mcp_server.domain.model.Spouse;
 import com.lawrabot.divorce_mcp_server.domain.valueobject.FullNameVO;
 import com.lawrabot.divorce_mcp_server.domain.valueobject.PhoneNumberVO;
 
 /**
- * Implementación "Pure Java" del caso de uso. Sin anotaciones de Spring Boot,
- * garantizando portabilidad e independencia de framework.
+ * Implementación del caso de uso para iniciar un expediente, ahora integrado con el Master Client Index (MCI).
  */
 public class CreateDivorceDossierService implements CreateDivorceDossierUseCase {
 
     private final IExpedienteRepository expedienteRepository;
-    private final ISpouseRepository spouseRepository;
+    private final ICitizenRepository citizenRepository;
 
-    public CreateDivorceDossierService(IExpedienteRepository expedienteRepository, ISpouseRepository spouseRepository) {
+    public CreateDivorceDossierService(IExpedienteRepository expedienteRepository, ICitizenRepository citizenRepository) {
         this.expedienteRepository = expedienteRepository;
-        this.spouseRepository = spouseRepository;
+        this.citizenRepository = citizenRepository;
     }
 
     @Override
     public Expediente execute(String clientPhone, String firstName, String lastName) {
-        // 1. Buscamos si existe un expediente activo.
-        // Si ya pasó la etapa de BLSG_PRECONSULTA, lanzamos error. Si está en BLSG_PRECONSULTA, lo reutilizamos.
+        // 1. Master Client Index: Buscar o crear el Ciudadano
+        Citizen citizen = citizenRepository.findByDni(null) // Por ahora no tenemos DNI en el inicio del bot
+                .orElse(null);
+
+        // Fallback por teléfono si no hay DNI (muy común en el inicio del flujo de WhatsApp)
+        if (citizen == null) {
+            // Buscamos si ya existe alguien con este teléfono
+            // Nota: El repositorio debería soportar búsqueda por teléfono si queremos ser precisos.
+            // Por simplicidad en este paso, creamos uno nuevo si no hay match claro.
+            citizen = Citizen.builder()
+                    .fullName(firstName + " " + lastName)
+                    .phoneNumber(clientPhone)
+                    .build();
+            citizen = citizenRepository.save(citizen);
+        }
+
+        // 2. Gestión del Expediente
         Expediente expediente = expedienteRepository.findActiveByClientPhone(clientPhone).orElse(null);
 
         if (expediente != null) {
@@ -33,26 +49,20 @@ public class CreateDivorceDossierService implements CreateDivorceDossierUseCase 
                 throw new IllegalStateException("Ya existe un trámite de divorcio activo para este celular (" + expediente.getId() + ").");
             }
         } else {
-            // Si el BLSG no se usó por algún motivo, lo creamos de cero
             expediente = Expediente.createNew(PhoneNumberVO.of(clientPhone), com.lawrabot.divorce_mcp_server.domain.enums.DivorceTypeEnum.UNILATERAL);
         }
 
-        // 2. Crear o actualizar el Cónyuge Peticionante usando la lógica de Dominio
-        Spouse petitioner = Spouse.builder()
-                .id(java.util.UUID.randomUUID())
-                .name(new FullNameVO(firstName, lastName))
-                .phoneNumber(PhoneNumberVO.of(clientPhone))
-                // Si el DNI ya estuviera, lo pasaríamos, pero start_divorce_process no lo recibe. El DNI queda en el SocioEconomicProfile.
+        // 3. Vincular Ciudadano al Expediente como PETITIONER (MCI Participation)
+        CaseParticipant participant = CaseParticipant.builder()
+                .citizen(citizen)
+                .role(CaseRole.PETITIONER)
                 .build();
         
-        // 3. Conectamos y guardamos
-        expediente.setPetitioner(petitioner);
+        expediente.addParticipant(participant);
         
-        // Actualizamos estado a la siguiente fase
+        // Actualizamos etapa de recolección
         expediente.updateCollectionStage(com.lawrabot.divorce_mcp_server.domain.enums.DataCollectionStageEnum.PENDING_SOCIOECONOMIC_EVALUATION);
 
-        spouseRepository.save(petitioner);
         return expedienteRepository.save(expediente);
-
     }
 }

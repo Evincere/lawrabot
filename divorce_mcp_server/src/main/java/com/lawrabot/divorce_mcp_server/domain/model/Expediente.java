@@ -1,5 +1,6 @@
 package com.lawrabot.divorce_mcp_server.domain.model;
 
+import com.lawrabot.divorce_mcp_server.domain.enums.CaseRole;
 import com.lawrabot.divorce_mcp_server.domain.enums.DataCollectionStageEnum;
 import com.lawrabot.divorce_mcp_server.domain.enums.DivorceTypeEnum;
 import com.lawrabot.divorce_mcp_server.domain.enums.ExpedienteStatusEnum;
@@ -63,6 +64,10 @@ public class Expediente {
     // Convenio Regulador
     @Nullable
     private RegulatoryAgreement regulatoryAgreement;
+
+    // --- NUEVO: Master Client Index Integration ---
+    @Builder.Default
+    private List<CaseParticipant> participants = new ArrayList<>();
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -166,6 +171,20 @@ public class Expediente {
             this.children = new ArrayList<>();
         }
         this.children.add(child);
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    // --- MÉTODOS MCI ---
+
+    public void addParticipant(Citizen citizen, CaseRole role) {
+        this.addParticipant(citizen, role, null);
+    }
+
+    public void addParticipant(Citizen citizen, CaseRole role, String summary) {
+        if (this.participants == null) {
+            this.participants = new ArrayList<>();
+        }
+        this.participants.add(CaseParticipant.create(citizen, role, summary));
         this.updatedAt = LocalDateTime.now();
     }
 

@@ -25,8 +25,8 @@ public class UseCaseConfig {
     @Bean
     public CreateDivorceDossierUseCase createDivorceDossierUseCase(
             IExpedienteRepository expedienteRepo,
-            ISpouseRepository spouseRepo) {
-        return new CreateDivorceDossierService(expedienteRepo, spouseRepo);
+            com.lawrabot.divorce_mcp_server.application.port.out.ICitizenRepository citizenRepo) {
+        return new CreateDivorceDossierService(expedienteRepo, citizenRepo);
     }
 
     @Bean

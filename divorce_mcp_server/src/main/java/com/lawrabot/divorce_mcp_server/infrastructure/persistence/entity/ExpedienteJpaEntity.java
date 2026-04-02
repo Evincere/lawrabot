@@ -98,6 +98,11 @@ public class ExpedienteJpaEntity {
     @JoinColumn(name = "regulatory_agreement_id", referencedColumnName = "id")
     private RegulatoryAgreementJpaEntity regulatoryAgreement;
 
+    // --- NUEVO: Master Client Index Integration ---
+    @OneToMany(mappedBy = "expediente", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<CaseParticipantJpaEntity> participants = new ArrayList<>();
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

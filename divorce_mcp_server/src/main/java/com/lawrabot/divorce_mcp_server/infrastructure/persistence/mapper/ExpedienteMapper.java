@@ -11,6 +11,7 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -24,15 +25,18 @@ public class ExpedienteMapper {
     private final ChildMapper childMapper;
     private final RegulatoryAgreementMapper agreementMapper;
     private final SocioEconomicProfileMapper profileMapper;
+    private final CaseParticipantMapper participantMapper;
 
     public ExpedienteMapper(SpouseMapper spouseMapper,
                             ChildMapper childMapper,
                             RegulatoryAgreementMapper agreementMapper,
-                            SocioEconomicProfileMapper profileMapper) {
+                            SocioEconomicProfileMapper profileMapper,
+                            CaseParticipantMapper participantMapper) {
         this.spouseMapper = spouseMapper;
         this.childMapper = childMapper;
         this.agreementMapper = agreementMapper;
         this.profileMapper = profileMapper;
+        this.participantMapper = participantMapper;
     }
 
     public ExpedienteJpaEntity toEntity(Expediente domain) {
@@ -58,6 +62,9 @@ public class ExpedienteMapper {
                 .children(childEntities)
                 .socioEconomicProfile(profileMapper.toEntity(domain.getSocioEconomicProfile()))
                 .regulatoryAgreement(agreementMapper.toEntity(domain.getRegulatoryAgreement()))
+                .participants(domain.getParticipants() != null ? 
+                    domain.getParticipants().stream().map(participantMapper::toEntity).collect(Collectors.toList()) : 
+                    new ArrayList<>())
                 .createdAt(domain.getCreatedAt())
                 .updatedAt(domain.getUpdatedAt())
                 .build();
@@ -86,6 +93,9 @@ public class ExpedienteMapper {
                 .children(domainChildren)
                 .socioEconomicProfile(profileMapper.toDomain(entity.getSocioEconomicProfile()))
                 .regulatoryAgreement(agreementMapper.toDomain(entity.getRegulatoryAgreement()))
+                .participants(entity.getParticipants() != null ? 
+                    entity.getParticipants().stream().map(participantMapper::toDomain).collect(Collectors.toList()) : 
+                    new ArrayList<>())
                 .createdAt(entity.getCreatedAt() != null ? entity.getCreatedAt() : LocalDateTime.now())
                 .updatedAt(entity.getUpdatedAt() != null ? entity.getUpdatedAt() : LocalDateTime.now())
                 .build();

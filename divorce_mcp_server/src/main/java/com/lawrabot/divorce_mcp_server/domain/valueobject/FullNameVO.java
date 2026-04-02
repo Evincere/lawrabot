@@ -19,6 +19,18 @@ public class FullNameVO {
         this.lastName = lastName.trim().toUpperCase();
     }
 
+    public static FullNameVO fromFullString(String fullName) {
+        if (fullName == null || fullName.isBlank()) {
+            throw new IllegalArgumentException("Nombre completo no puede ser nulo o vacío.");
+        }
+        String[] parts = fullName.split(" ", 2);
+        if (parts.length == 2) {
+            return new FullNameVO(parts[0], parts[1]);
+        } else {
+            return new FullNameVO(parts[0], "PENDIENTE"); // Apellido por defecto si solo hay un nombre
+        }
+    }
+
     /**
      * Devuelve el nombre completo en formato "APELLIDO, NOMBRE".
      */

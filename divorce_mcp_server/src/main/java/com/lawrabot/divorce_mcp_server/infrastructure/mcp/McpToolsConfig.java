@@ -9,9 +9,11 @@ import org.springframework.context.annotation.Configuration;
 public class McpToolsConfig {
 
     @Bean
-    public ToolCallbackProvider divorceToolsProvider(DivorceMcpController divorceMcpController) {
+    public ToolCallbackProvider divorceToolsProvider(
+            DivorceMcpController divorceMcpController,
+            MciMcpController mciMcpController) {
         return MethodToolCallbackProvider.builder()
-                .toolObjects(divorceMcpController)
+                .toolObjects(divorceMcpController, mciMcpController)
                 .build();
     }
 }
