@@ -8,7 +8,7 @@
 
 ## 1. Arquitectura General (Hub-and-Spoke)
 
-LawraBot opera como un ecosistema modular donde un **Core Central** gestiona la identidad del ciudadano y el aprendizaje, mientras que **Agentes Especializados** (Spokes) gestionan la lógica legal de cada trámite.
+LawraBot opera como un ecosistema modular donde un **Core Central** gestiona la identidad del ciudadano (MCI) y el aprendizaje (Learning Loop), mientras que el **Módulo de Divorcios** gestiona la lógica legal específica.
 
 ```mermaid
 graph TD
@@ -17,24 +17,22 @@ graph TD
         Web[Operations Center - Next.js]
     end
 
-    subgraph "Hub Central (Core)"
+    subgraph "Hub Central (Core MCI)"
         MCI[Master Client Index]
         LL[Learning Loop]
-        RBAC[Auth & Privacy Tiers]
+        API[REST API / Controllers]
     end
 
-    subgraph "Spokes (Servidores MCP)"
+    subgraph "Módulos Legales (MCP)"
         Divorce[Divorce MCP Server]
-        Succ[Succession MCP Server - Futuro]
-        Alimony[Alimony MCP Server - Futuro]
+        Future[Futuros Trámites...]
     end
 
     WA <-->|MCP Tools| Divorce
-    Web <-->|MCP Tools/API| MCI
-    Web <-->|Control| Divorce
-    Divorce <-->|Query/Store| MCI
+    Web <-->|REST API| API
+    Web <-->|REST API| Divorce
+    Divorce <-->|Persistence| MCI
     Divorce -->|Feedback| LL
-    LL -->|Few-Shot| Divorce
 ```
 
 ---
@@ -266,15 +264,24 @@ sequenceDiagram
     participant BLSG as blsg.pjm.gob.ar
 
     Bot->>MCP: consultar_blsg - dni, cuil, nombre
-    MCP->>PW: Abrir navegador headless
+    MCP->>PW: Abrir navegador persistent context (Playwright)
     PW->>BLSG: Navegar a blsg.pjm.gob.ar
-    PW->>BLSG: Ingresar DNI o Nombre+Apellido
-    PW->>BLSG: Ejecutar búsqueda
-    BLSG-->>PW: Resultado ACCEDE o NO ACCEDE
+    PW->>PW: Detección Automática de Sesión
+    alt Sesión Expirada
+        PW->>MS: Login Microsoft Entra ID (Email/Pass/KMSI)
+        MS-->>PW: Redirección post-auth
+        opt Host auth24.pjm.gob.ar
+            PW->>KC: Login Keycloak (PJM Auth)
+        end
+    end
+    PW->>BLSG: Ingresar DNI y buscar
+    PW->>PW: Expandir Card de Resultados (Click .last())
+    PW->>PW: Esperar Render Asíncrono (Regex Match)
+    BLSG-->>PW: Resultado Aprobado / Rechazado / Inconcluso
     PW->>BLSG: Descargar constancia PDF
     PW-->>MCP: Constancia PDF descargada
-    MCP->>MCP: Guardar constancia en BD + filesystem
-    MCP-->>Bot: resultado + url_constancia
+    MCP->>MCP: Guardar constancia en storage/certificates/
+    MCP-->>Bot: resultado + path_constancia
 ```
 
 ### 5.2 Datos Mínimos para la Consulta BLSG
@@ -309,13 +316,12 @@ El sistema BLSG evalúa basándose en datos del SINTyS. Criterios objetivos de d
 │
 ├── /divorce_mcp_server            # Servidor MCP Legal (Java/Spring AI)
 │   ├── src/main/java/com/lawrabot/divorce_mcp_server/
-│   │   ├── DivorceMcpServerApplication.java
-│   │   ├── tools/                 # Herramientas MCP (@McpTool)
-│   │   ├── model/                 # Entidades JPA
-│   │   ├── repository/            # Repositorios Spring Data
-│   │   ├── service/               # Lógica de negocio
-│   │   ├── integration/           # Clientes HTTP (BLSG, Email)
-│   │   └── config/                # Configuración de beans
+│   │   ├── application/           # Ports & UseCases (Hexagonal)
+│   │   ├── domain/                # Modelos de Dominio & Value Objects
+│   │   └── infrastructure/        # Adaptadores (JPA, REST, MCP)
+│   │       ├── persistence/       # Mappers & Repositorios JPA
+│   │       ├── rest/              # Controladores REST API (Dashboard)
+│   │       └── mcp/               # Herramientas @McpTool
 │   ├── src/main/resources/
 │   │   ├── application.properties
 │   │   └── templates/legal-templates/  # Plantillas .docx judiciales

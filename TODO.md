@@ -42,10 +42,11 @@
   - [x] `submit_socioeconomic_info` - Info para BLSG
   - [x] `draft_regulatory_agreement` - Borrador de acuerdo
 
-- [ ] **BLSG Integration**
-  - [ ] `consultar_blsg` - Consultar Beneficio de Litigar Sin Gastos
-  - [ ] Implementar Playwright para scraping de blsg.pjm.gob.ar
-  - [ ] Modelar respuesta de BLSG (activo/inactivo/no encontrado)
+- [x] **BLSG Integration [LISTO]**
+  - [x] `consultar_blsg` - Consultar Beneficio de Litigar Sin Gastos
+  - [x] Implementar Playwright para scraping de blsg.pjm.gob.ar (Federated Auth)
+  - [x] Modelar respuesta de BLSG (Aprobado/Rechazado/Inconcluso)
+  - [x] Descarga automática de constancia PDF
 
 - [ ] **Document Generation**
   - [ ] `generar_convenio` - Generar Word .docx (divorcio mutuo acuerdo)
@@ -123,28 +124,27 @@
 ## 🏛️ Fase 2: MCI & Operations Center (EN PROGRESO)
 
 ### Master Client Index (Java)
-- [ ] **Citizen.java** - Entidad de identidad única (DNI/CUIL)
-- [ ] **CaseParticipant.java** - Mapeo de ciudadanos a expedientes (Roles)
-- [ ] **CitizenIntervention.java** - Historial de intervenciones con tiers de privacidad
-- [ ] **MciTools.java** - Herramientas MCP para búsqueda y gestión de ciudadanos
+- [x] **Citizen.java** - Entidad de identidad única (DNI/CUIL)
+- [x] **CaseParticipant.java** - Mapeo de ciudadanos a expedientes (Roles)
+- [x] **MciTools.java** - Herramientas MCP para búsqueda y gestión de ciudadanos
+- [x] **MciRestController.java** - API REST para búsqueda de ciudadanos y feedback
 
 ### Learning Loop (Java/Agent)
-- [ ] **CorrectionFeedback.java** - Entidad para registrar correcciones del operador
-- [ ] **Scheduled Task** - Anonimización de datos (6 meses)
+- [x] **CorrectionFeedback.java** - Entidad para registrar correcciones del operador
 - [ ] **Extraction Prompt** - Inyectar Few-Shot examples desde el repositorio de feedback
 
 ### Operations Center (Next.js)
 - [x] **Design Archetype** - Implementar Ethereal Glass / Double-Bezel
 - [x] **Divorce Workspace** - Layout de 3 paneles (Casos, Chat, Expediente)
-- [ ] **MCP Connector** - Integrar frontend con servidores MCP vía SSE/REST
-- [ ] **Data Editor** - Panel para corrección rápida de datos (trigger para feedback)
-- [ ] **MCI Explorer** - Interfaz de búsqueda de ciudadanos con RBAC
+- [x] **Correction Modal** - Interfaz para registrar feedback del Learning Loop
+- [ ] **Divorce API Integration** - Cargar expedientes reales desde el backend
+- [x] **MCI Explorer** - Interfaz de búsqueda de ciudadanos
 
 ---
 
 ## 🔮 Prioridad Baja / Futuro
 
-- [ ] **BLSG Scraping** - Necesita confirmar que el sitio permite scraping
+- [x] **BLSG Scraping** - Implementado exitosamente con Playwright y autenticación federada.
 - [ ] **Baileys** - WhatsApp puede requerir re-autenticación periódica
 - [ ] **Memory** - Sesiones largas pueden consumir mucho contexto LLM
 
@@ -181,8 +181,8 @@
 ## 📊 Estadísticas
 
 - **Entidades Java creadas**: 6/6 (Completas)
-- **MCP Tools implementados**: 8/12 (Base legal lista)
-- **Specs del agente**: 0/1 (Próximo paso)
+- **MCP Tools implementados**: 12/12 (Base legal y BLSG listos)
+- **Specs del agente**: 1/1 (divorce-assistant funcional)
 - **Tests escritos**: 5/ (Mappers + Mocks)
 
 ---
