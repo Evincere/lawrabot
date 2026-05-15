@@ -48,7 +48,7 @@ public class ExpedienteMapper {
                         .collect(Collectors.toList())
                 : List.of();
 
-        return ExpedienteJpaEntity.builder()
+        ExpedienteJpaEntity entity = ExpedienteJpaEntity.builder()
                 .id(domain.getId())
                 .contactPhoneNumber(toPhoneEmbeddable(domain.getContactPhoneNumber()))
                 .status(domain.getStatus())
@@ -57,17 +57,30 @@ public class ExpedienteMapper {
                 .lastConjugalResidence(toAddressEmbeddable(domain.getLastConjugalResidence()))
                 .marriageDate(domain.getMarriageDate())
                 .deFactoSeparationDate(domain.getDeFactoSeparationDate())
+                .marriageCertificateNumber(domain.getMarriageCertificateNumber())
+                .marriageRegistryBook(domain.getMarriageRegistryBook())
+                .marriageRegistryPage(domain.getMarriageRegistryPage())
+                .marriageRegistryOffice(domain.getMarriageRegistryOffice())
+                .marriagePlace(domain.getMarriagePlace())
                 .petitioner(spouseMapper.toEntity(domain.getPetitioner()))
                 .respondent(spouseMapper.toEntity(domain.getRespondent()))
                 .children(childEntities)
                 .socioEconomicProfile(profileMapper.toEntity(domain.getSocioEconomicProfile()))
                 .regulatoryAgreement(agreementMapper.toEntity(domain.getRegulatoryAgreement()))
+                .rawAgreementText(domain.getRawAgreementText())
                 .participants(domain.getParticipants() != null ? 
                     domain.getParticipants().stream().map(participantMapper::toEntity).collect(Collectors.toList()) : 
                     new ArrayList<>())
                 .createdAt(domain.getCreatedAt())
                 .updatedAt(domain.getUpdatedAt())
                 .build();
+                
+        // Set back-references to satisfy non-null constraints
+        if (entity.getParticipants() != null) {
+            entity.getParticipants().forEach(p -> p.setExpediente(entity));
+        }
+        
+        return entity;
     }
 
     public Expediente toDomain(ExpedienteJpaEntity entity) {
@@ -88,11 +101,17 @@ public class ExpedienteMapper {
                 .lastConjugalResidence(toAddressVO(entity.getLastConjugalResidence()))
                 .marriageDate(entity.getMarriageDate())
                 .deFactoSeparationDate(entity.getDeFactoSeparationDate())
+                .marriageCertificateNumber(entity.getMarriageCertificateNumber())
+                .marriageRegistryBook(entity.getMarriageRegistryBook())
+                .marriageRegistryPage(entity.getMarriageRegistryPage())
+                .marriageRegistryOffice(entity.getMarriageRegistryOffice())
+                .marriagePlace(entity.getMarriagePlace())
                 .petitioner(spouseMapper.toDomain(entity.getPetitioner()))
                 .respondent(spouseMapper.toDomain(entity.getRespondent()))
                 .children(domainChildren)
                 .socioEconomicProfile(profileMapper.toDomain(entity.getSocioEconomicProfile()))
                 .regulatoryAgreement(agreementMapper.toDomain(entity.getRegulatoryAgreement()))
+                .rawAgreementText(entity.getRawAgreementText())
                 .participants(entity.getParticipants() != null ? 
                     entity.getParticipants().stream().map(participantMapper::toDomain).collect(Collectors.toList()) : 
                     new ArrayList<>())

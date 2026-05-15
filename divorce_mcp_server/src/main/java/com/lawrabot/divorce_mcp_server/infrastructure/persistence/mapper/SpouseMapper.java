@@ -3,6 +3,7 @@ package com.lawrabot.divorce_mcp_server.infrastructure.persistence.mapper;
 import com.lawrabot.divorce_mcp_server.domain.model.Spouse;
 import com.lawrabot.divorce_mcp_server.domain.valueobject.AddressVO;
 import com.lawrabot.divorce_mcp_server.domain.valueobject.CuilVO;
+import com.lawrabot.divorce_mcp_server.domain.valueobject.DNIVO;
 import com.lawrabot.divorce_mcp_server.domain.valueobject.FullNameVO;
 import com.lawrabot.divorce_mcp_server.domain.valueobject.PhoneNumberVO;
 import com.lawrabot.divorce_mcp_server.infrastructure.persistence.embeddable.AddressEmbeddable;
@@ -27,13 +28,20 @@ public class SpouseMapper {
         CuilVO cuilVO = domain.getCuil();
         String cuil = (cuilVO != null) ? cuilVO.getValue() : null;
 
+        DNIVO dniVO = domain.getDni();
+        String dni = (dniVO != null) ? dniVO.getValue() : null;
+
         return SpouseJpaEntity.builder()
                 .id(domain.getId())
                 .name(new FullNameEmbeddable(firstName, lastName))
                 .phoneNumber(phone != null ? new com.lawrabot.divorce_mcp_server.infrastructure.persistence.embeddable.PhoneNumberEmbeddable(phone) : null)
+                .dni(dni)
                 .cuil(cuil)
                 .residentialAddress(toAddressEmbeddable(domain.getAddress()))
                 .profession(domain.getProfession())
+                .nationality(domain.getNationality())
+                .email(domain.getEmail())
+                .birthDate(domain.getBirthDate())
                 .build();
     }
 
@@ -50,9 +58,13 @@ public class SpouseMapper {
                 .id(entity.getId())
                 .name(name)
                 .phoneNumber(phone != null ? PhoneNumberVO.of(phone) : null)
+                .dni(entity.getDni() != null ? DNIVO.of(entity.getDni()) : null)
                 .cuil(entity.getCuil() != null ? new CuilVO(entity.getCuil()) : null)
                 .address(toAddressVO(entity.getResidentialAddress()))
                 .profession(entity.getProfession())
+                .nationality(entity.getNationality())
+                .email(entity.getEmail())
+                .birthDate(entity.getBirthDate())
                 .build();
     }
 

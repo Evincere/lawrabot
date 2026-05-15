@@ -1,17 +1,17 @@
-/** Shared types for the session system. */
+import type { LLMToolCall } from "../llm/types.js";
 
 export type MessageRole = "user" | "assistant" | "system" | "tool";
 
 export interface ChatMessage {
-  role: MessageRole;
+  role: "user" | "assistant" | "system";
   content: string;
   timestamp: number;
+  toolCalls?: LLMToolCall[];
   metadata?: Record<string, unknown>;
 }
 
 export interface ToolCallMessage {
   role: "tool";
-  toolName: string;
   toolCallId: string;
   content: string;
   timestamp: number;

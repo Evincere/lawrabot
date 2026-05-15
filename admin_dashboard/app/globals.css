@@ -1,21 +1,38 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui;
-  --font-mono: var(--font-geist-mono), ui-monospace, sfmono-regular;
+  --font-sans: var(--font-geist-sans), "Inter", ui-sans-serif, system-ui;
+  --font-mono: var(--font-geist-mono), "JetBrains Mono", ui-monospace, sfmono-regular;
 
-  --color-background: #050505;
-  --color-foreground: #f8fafc;
+  /* Superficies — basadas en papel de expediente y tinta */
+  --color-background: #080a0f;           /* Fondo principal: azul tinta muy oscuro */
+  --color-foreground: #f1f5f9;           /* Blanco azulado suave */
   
-  --color-accent: #3b82f6;
+  --color-surface: #0f1219;              /* Cards y paneles elevados */
+  --color-surface-hover: #161a24;
+  --color-surface-active: #1c2230;
+  --color-surface-inset: #05060a;        /* Inputs y áreas hundidas */
+
+  /* Acento institucional — azul tinta judicial */
+  --color-accent: #2563eb;               /* Azul tinta oficial */
   --color-accent-foreground: #ffffff;
   
-  --color-card: rgba(15, 23, 42, 0.5);
-  --color-card-border: rgba(255, 255, 255, 0.1);
+  /* Semánticos — sellos institucionales */
+  --color-danger: #e11d48;               /* Sello Urgente / Error */
+  --color-success: #10b981;              /* Sello Vigente / Aprobado */
+  --color-warning: #f59e0b;              /* Sello Pendiente / Alerta */
+  --color-info: #6366f1;                 /* Sello Archivados / Histórico */
+
+  /* Bordes — jerarquía sin sombras */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.15);
+  --color-border-accent: rgba(37, 99, 235, 0.3);
   
-  /* High-end specific tokens */
-  --radius-xl: 2rem;
-  --radius-2xl: 2.5rem;
+  /* Radii institucionales (densidad profesional) */
+  --radius-sm: 0.5rem;   /* 8px */
+  --radius-md: 0.75rem;  /* 12px */
+  --radius-lg: 1rem;     /* 16px */
+  --radius-xl: 1.5rem;   /* 24px */
 }
 
 :root {
@@ -24,7 +41,7 @@
 }
 
 * {
-  border-color: var(--color-card-border);
+  border-color: var(--color-border);
   outline-color: var(--color-accent);
 }
 
@@ -37,26 +54,29 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Ethereal Glass Effects */
-.glass {
-  background: var(--color-card);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--color-card-border);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05);
+/* Institutional "Expediente" Surfaces */
+.expediente-panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
-.glass-pill {
-  border-radius: 9999px;
-  padding: 0.375rem 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  
-  /* Manual inlining of glass properties to avoid Tailwind v4 apply issues with custom classes */
-  background: var(--color-card);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--color-card-border);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05);
+.expediente-active {
+  border-color: var(--color-border-accent);
+  background: var(--color-surface-hover);
+}
+
+.legal-text {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.sello {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 800;
+  font-size: 0.65rem;
 }
 
 /* Perpetual Micro-noise */
@@ -78,4 +98,26 @@ body {
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(16px) scale(0.98); filter: blur(4px); }
   to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+/* Custom Scrollbar Utility */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

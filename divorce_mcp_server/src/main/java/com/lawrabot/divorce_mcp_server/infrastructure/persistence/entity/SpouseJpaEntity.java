@@ -61,6 +61,9 @@ public class SpouseJpaEntity {
     @Column(name = "profession", length = 100)
     private String profession;
 
+    @Column(name = "nationality", length = 50)
+    private String nationality;
+
     @Embedded
     @AttributeOverrides({
         @AttributeOverride(name = "phoneNumber", column = @Column(name = "phone_number"))

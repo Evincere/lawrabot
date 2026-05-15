@@ -16,6 +16,7 @@ public class SpringDataCorrectionFeedbackRepository implements ICorrectionFeedba
 
     @Override
     public void save(CorrectionFeedbackJpaEntity feedback) {
+        java.util.Objects.requireNonNull(feedback, "Feedback cannot be null");
         jpaRepository.save(feedback);
     }
 

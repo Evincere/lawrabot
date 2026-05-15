@@ -10,7 +10,7 @@ import { createLLMProvider } from "../llm/router.js";
 import { createMessageRouter } from "./message-router.js";
 import { createHealthRoutes } from "./health.js";
 import { datetimeTool } from "../tools/built-in/datetime.js";
-import { generatePdfTool } from "../tools/built-in/documents.js";
+import { generatePdfTool, sendFileTool } from "../tools/built-in/documents.js";
 import { loadSpecialization } from "../specialization/loader.js";
 import { WhatsAppAdapter } from "../channels/whatsapp/adapter.js";
 import { TelegramAdapter } from "../channels/telegram/adapter.js";
@@ -53,6 +53,7 @@ export async function startGateway(opts: GatewayOptions): Promise<GatewayServer>
   // ─── 3. Register Built-in Tools ────────────────────────────
   toolRegistry.register(datetimeTool);
   toolRegistry.register(generatePdfTool);
+  toolRegistry.register(sendFileTool);
 
   // ─── 4. Register Domain Tools from Specialization ──────────
   toolRegistry.registerAll(spec.tools);
@@ -125,6 +126,53 @@ export async function startGateway(opts: GatewayOptions): Promise<GatewayServer>
       llm: { provider: config.llm.provider, model: config.llm.model },
       hooks: hookRunner.count(),
     });
+  });
+
+  // Proactive push endpoint — permite al backend enviar mensajes sin esperar al ciudadano
+  app.post("/push", async (req, res) => {
+    const { phoneNumber, message, taskId } = req.body as {
+      phoneNumber?: string;
+      message?: string;
+      taskId?: string;
+    };
+
+    if (!phoneNumber || !message) {
+      res.status(400).json({ error: "phoneNumber and message are required" });
+      return;
+    }
+
+    const wa = channels.get("whatsapp");
+    if (!wa) {
+      res.status(503).json({ error: "WhatsApp channel is not available" });
+      return;
+    }
+
+    // Construir el JID estándar de WhatsApp desde el número de teléfono
+    const jid = `${phoneNumber}@s.whatsapp.net`;
+
+    try {
+      log.info(`[push] Sending proactive message to ${jid} (task: ${taskId ?? "n/a"})`);
+      
+      // 1. Enviar mensaje real vía WhatsApp
+      await wa.sendMessage(jid, { text: message });
+      log.info(`[push] Message sent successfully to ${jid}`);
+
+      // 2. Inyectar en el historial de sesión para mantener el contexto del LLM
+      const session = sessionManager.getOrCreate("whatsapp", jid);
+      sessionManager.addMessage(session, {
+        role: "assistant",
+        content: `[SISTEMA - Mensaje Proactivo enviado al ciudadano por solicitud del operador humano (taskId: ${taskId ?? "n/a"})]\n${message}`,
+        timestamp: Date.now(),
+      });
+      log.info(`[push] Context injected into session history for ${jid}`);
+
+      res.json({ success: true, jid, taskId });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      log.error(`[push] Failed to send message to ${jid}: ${msg}`);
+      res.status(500).json({ error: msg });
+    }
+
   });
 
   const httpServer: Server = app.listen(config.port, () => {

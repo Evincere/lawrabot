@@ -69,6 +69,9 @@ public class SocioEconomicProfileJpaEntity {
     @Column(name = "vehicles_registered")
     private Integer vehiclesRegistered;
 
+    @Column(name = "occupation", length = 255)
+    private String occupation;
+
     @Column(name = "has_formal_employment")
     private Boolean hasFormalEmployment;
 

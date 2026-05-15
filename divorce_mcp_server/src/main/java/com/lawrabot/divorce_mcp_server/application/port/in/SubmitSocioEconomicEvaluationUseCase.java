@@ -14,14 +14,17 @@ public interface SubmitSocioEconomicEvaluationUseCase {
      * @param expedienteId       ID del Expediente.
      * @param monthlyIncomeArs   Ingresos mensuales declarados (ARS).
      * @param housingSituation   Situación habitacional.
+     * @param occupation         Ocupación actual.
      * @param vehiclesRegistered Cantidad de vehículos a su nombre.
      * @param hasFormalEmployment Si tiene empleo formal en relación de dependencia.
      * @param observations       Observaciones adicionales del defensor.
+     * @return true si la evaluación preliminar es positiva según los criterios de la Defensoría.
      */
-    void execute(UUID expedienteId,
-                 BigDecimal monthlyIncomeArs,
-                 HousingSituationEnum housingSituation,
-                 Integer vehiclesRegistered,
-                 boolean hasFormalEmployment,
-                 String observations);
+    boolean execute(UUID expedienteId,
+                    BigDecimal monthlyIncomeArs,
+                    HousingSituationEnum housingSituation,
+                    String occupation,
+                    Integer vehiclesRegistered,
+                    boolean hasFormalEmployment,
+                    String observations);
 }

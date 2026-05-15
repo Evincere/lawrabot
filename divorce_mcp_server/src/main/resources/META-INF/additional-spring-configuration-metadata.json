@@ -1,0 +1,27 @@
+{"properties": [
+  {
+    "name": "blsg.portal.password",
+    "type": "java.lang.String",
+    "description": "Contraseña para el portal BLSG."
+  },
+  {
+    "name": "blsg.portal.username",
+    "type": "java.lang.String",
+    "description": "Nombre de usuario/email para el portal BLSG."
+  },
+  {
+    "name": "lawrabot.storage.evidence-path",
+    "type": "java.lang.String",
+    "description": "A description for 'lawrabot.storage.evidence-path'"
+  },
+  {
+    "name": "blsg.portal.headless",
+    "type": "java.lang.String",
+    "description": "A description for 'blsg.portal.headless'"
+  },
+  {
+    "name": "blsg.portal.timeout-ms",
+    "type": "java.lang.String",
+    "description": "A description for 'blsg.portal.timeout-ms'"
+  }
+]}

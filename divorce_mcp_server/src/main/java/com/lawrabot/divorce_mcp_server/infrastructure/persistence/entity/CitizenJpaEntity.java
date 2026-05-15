@@ -23,7 +23,7 @@ import java.util.UUID;
 public class CitizenJpaEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(columnDefinition = "uuid")
     private UUID id;
 
     @Column(unique = true, nullable = false)
@@ -38,6 +38,10 @@ public class CitizenJpaEntity {
     private String phoneNumber;
 
     private String email;
+
+    private String nationality;
+
+    private String occupation;
 
     private String address;
 

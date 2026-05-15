@@ -5,11 +5,14 @@ package com.lawrabot.divorce_mcp_server.domain.enums;
  * El orden de las constantes refleja el flujo procesal del Bot de izquierda a derecha.
  */
 public enum DataCollectionStageEnum {
-    PENDING_BLSG_SCRAPING,           // El bot tiene el DNI y está esperando el resultado del scraping judicial.
-    PENDING_SOCIOECONOMIC_EVALUATION, // El scraping fue positivo. Ahora se aplican los criterios propios de la Defensoría.
-    PENDING_BASIC_INFO,              // BLSG aprobado. Faltan nombres y datos básicos del proceso.
-    PENDING_MARRIAGE_DETAILS,        // Faltan fechas de matrimonio, separación y domicilio último.
-    PENDING_CHILDREN_INFO,           // Falta saber si hay hijos menores o vulnerables y sus edades.
-    PENDING_REGULATORY_AGREEMENT,    // Falta negociar las partes del convenio (Alimentos, Cuidado, Bienes).
-    COMPLETED                        // Todos los datos duros recolectados. Listo para revisión final y PDF.
+    PENDING_BLSG_SCRAPING,             // Esperando resultado scraping judicial
+    PENDING_MODALITY_SELECTION,        // Elegir unilateral o conjunto
+    PENDING_RESPONDENT_BLSG,           // (Solo conjunto) BLSG del 2do cónyuge
+    PENDING_PERSONAL_DATA,             // Datos personales de las partes
+    PENDING_SOCIOECONOMIC_EVALUATION,  // Perfil económico (criterios Defensoría)
+    PENDING_MARRIAGE_DETAILS,          // Matrimonio y último domicilio conyugal
+    PENDING_CHILDREN_INFO,             // Hijos menores o vulnerables
+    PENDING_REGULATORY_AGREEMENT,      // Convenio regulador
+    COMPLETED,                         // Listo para revisión y PDF
+    REJECTED                           // Evaluación fallida → proceso detenido
 }

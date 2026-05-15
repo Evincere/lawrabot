@@ -72,6 +72,28 @@ public class ExpedienteJpaEntity {
     @Column(name = "defacto_separation_date")
     private LocalDate deFactoSeparationDate;
 
+    // Datos del Acta de Matrimonio — completados por el operador humano al visar
+    @Column(name = "marriage_certificate_number", length = 30)
+    private String marriageCertificateNumber;
+
+    @Column(name = "marriage_registry_book", length = 30)
+    private String marriageRegistryBook;
+
+    @Column(name = "marriage_registry_page", length = 30)
+    private String marriageRegistryPage;
+
+    @Column(name = "marriage_registry_office", length = 100)
+    private String marriageRegistryOffice;
+
+    @Column(name = "marriage_place", length = 200)
+    private String marriagePlace;
+
+    @Column(name = "marriage_certificate_id", columnDefinition = "uuid")
+    private UUID marriageCertificateId;
+
+    @Column(name = "marriage_certificate_issuance_date")
+    private LocalDate marriageCertificateIssuanceDate;
+
     // Cónyuge Peticionante (FK hacia tabla spouses)
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     @JoinColumn(name = "petitioner_id", referencedColumnName = "id")
@@ -97,6 +119,10 @@ public class ExpedienteJpaEntity {
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     @JoinColumn(name = "regulatory_agreement_id", referencedColumnName = "id")
     private RegulatoryAgreementJpaEntity regulatoryAgreement;
+
+    // Texto crudo extraído de la conversación de WhatsApp para revisión humana
+    @Column(name = "raw_agreement_text", columnDefinition = "TEXT")
+    private String rawAgreementText;
 
     // --- NUEVO: Master Client Index Integration ---
     @OneToMany(mappedBy = "expediente", cascade = CascadeType.ALL, fetch = FetchType.LAZY)

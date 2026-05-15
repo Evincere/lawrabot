@@ -1,20 +1,23 @@
 package com.lawrabot.divorce_mcp_server.domain.valueobject;
 
-import lombok.Value;
+import java.util.Objects;
 
 /**
  * Objeto de Valor que representa el CUIL/CUIT en Argentina.
  * Incluye validación del dígito verificador según el algoritmo de ANSES/AFIP.
  */
-@Value
-public class CuilVO {
-    String value;
+public final class CuilVO {
+    private final String value;
 
     public CuilVO(String value) {
         if (value == null || !isValid(value)) {
             throw new IllegalArgumentException("Formato de CUIL/CUIT inválido: " + value);
         }
         this.value = normalize(value);
+    }
+
+    public String getValue() {
+        return value;
     }
 
     /**
@@ -51,5 +54,23 @@ public class CuilVO {
      */
     public String getFormatted() {
         return value.substring(0, 2) + "-" + value.substring(2, 10) + "-" + value.substring(10);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        CuilVO cuilVO = (CuilVO) o;
+        return Objects.equals(value, cuilVO.value);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(value);
+    }
+
+    @Override
+    public String toString() {
+        return getFormatted();
     }
 }

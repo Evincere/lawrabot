@@ -14,14 +14,21 @@ public class CitizenMapper {
     public Citizen toDomain(CitizenJpaEntity entity) {
         if (entity == null) return null;
 
+        var cuilStr = entity.getCuil();
+        var nameStr = entity.getFullName();
+        var phoneStr = entity.getPhoneNumber();
+        var addressStr = entity.getAddress();
+
         return Citizen.builder()
                 .id(entity.getId())
                 .dni(entity.getDni())
-                .cuil(entity.getCuil() != null ? new CuilVO(entity.getCuil()) : null)
-                .fullName(entity.getFullName() != null ? FullNameVO.fromFullString(entity.getFullName()) : null)
-                .phoneNumber(entity.getPhoneNumber() != null ? PhoneNumberVO.of(entity.getPhoneNumber()) : null)
+                .cuil(cuilStr != null ? new CuilVO(cuilStr) : null)
+                .fullName(nameStr != null ? FullNameVO.fromFullString(nameStr) : null)
+                .phoneNumber(phoneStr != null ? PhoneNumberVO.of(phoneStr) : null)
                 .email(entity.getEmail())
-                .address(entity.getAddress())
+                .nationality(entity.getNationality())
+                .occupation(entity.getOccupation())
+                .address(addressStr != null ? AddressVO.builder().street(addressStr).build() : null)
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();
@@ -30,14 +37,22 @@ public class CitizenMapper {
     public CitizenJpaEntity toEntity(Citizen domain) {
         if (domain == null) return null;
 
+        var fullName = domain.getFullName();
+        var cuil = domain.getCuil();
+        var phone = domain.getPhoneNumber();
+        var address = domain.getAddress();
+
         return CitizenJpaEntity.builder()
                 .id(domain.getId())
                 .dni(domain.getDni())
-                .cuil(domain.getCuil() != null ? domain.getCuil().getValue() : null)
-                .fullName(domain.getFullName() != null ? domain.getFullName().getFullName() : null)
-                .phoneNumber(domain.getPhoneNumber() != null ? domain.getPhoneNumber().getValue() : null)
+                .cuil(cuil != null ? cuil.getValue() : null)
+                .fullName(fullName != null ? fullName.getFullName() : null)
+                .phoneNumber(phone != null ? phone.getValue() : null)
                 .email(domain.getEmail())
-                .address(domain.getAddress())
+                .nationality(domain.getNationality())
+                .occupation(domain.getOccupation())
+                .address(address != null ? address.toLegalString() : null)
+                .createdAt(domain.getCreatedAt())
                 .updatedAt(domain.getUpdatedAt())
                 .build();
     }

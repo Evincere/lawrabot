@@ -3,11 +3,15 @@ import makeWASocket, {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   Browsers,
+  downloadMediaMessage,
+  getContentType,
   type WASocket,
   type proto,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import qrcode from "qrcode-terminal";
+import * as fs from "fs";
+import * as path from "path";
 import type { Logger } from "../../utils/logger.js";
 import type { ChannelAdapter, ChannelConfig, InboundHandler, OutboundMessage } from "../types.js";
 
@@ -65,7 +69,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
       }
     });
 
-    this.socket.ev.on("messages.upsert", (m) => {
+    this.socket.ev.on("messages.upsert", async (m) => {
       for (const msg of m.messages) {
         if (!msg.message || msg.key.fromMe) continue;
 
@@ -75,7 +79,16 @@ export class WhatsAppAdapter implements ChannelAdapter {
         });
 
         const text = this.extractText(msg);
-        if (!text) continue;
+        const mediaInfo = await this.processMediaIfPresent(msg);
+        
+        // Skip if there's no text AND no media
+        if (!text && !mediaInfo) continue;
+
+        // Construct final message text with metadata if media exists
+        let finalText = text ?? "";
+        if (mediaInfo) {
+          finalText += `\n\n[MEDIA] localPath=${mediaInfo.localPath} fileName=${mediaInfo.fileName} mimeType=${mediaInfo.mimeType} [/MEDIA]`;
+        }
 
         const conversationId = msg.key.remoteJid ?? "unknown";
         const senderId = msg.key.participant ?? msg.key.remoteJid ?? "unknown";
@@ -84,13 +97,49 @@ export class WhatsAppAdapter implements ChannelAdapter {
           channelId: this.id,
           conversationId,
           senderId,
-          text,
+          text: finalText.trim(),
           timestamp: (msg.messageTimestamp as number) * 1000 || Date.now(),
         });
       }
     });
 
     this.log.info("WhatsApp adapter started — scan QR code if prompted");
+  }
+
+  private async processMediaIfPresent(msg: proto.IWebMessageInfo): Promise<{ localPath: string; fileName: string; mimeType: string } | null> {
+    const type = getContentType(msg.message!);
+    if (type !== "imageMessage" && type !== "documentMessage" && type !== "videoMessage" && type !== "documentWithCaptionMessage") {
+      return null;
+    }
+
+    try {
+      const buffer = await downloadMediaMessage(msg, "buffer", {});
+      const mediaDir = path.join(".data", "media");
+      if (!fs.existsSync(mediaDir)) {
+        fs.mkdirSync(mediaDir, { recursive: true });
+      }
+
+      const m = msg.message!;
+      const document = m.documentMessage || m.imageMessage || m.videoMessage || m.documentWithCaptionMessage?.message?.documentMessage;
+      const fileName = (document?.fileName) || 
+                       (type === "imageMessage" ? `img_${Date.now()}.jpg` : (type === "videoMessage" ? `vid_${Date.now()}.mp4` : `doc_${Date.now()}.pdf`));
+      const mimeType = document?.mimetype || (type === "imageMessage" ? "image/jpeg" : (type === "videoMessage" ? "video/mp4" : "application/pdf"));
+      
+      const safeFileName = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+      const localPath = path.resolve(path.join(mediaDir, safeFileName));
+
+      fs.writeFileSync(localPath, buffer as Buffer);
+      this.log.info(`[whatsapp] Downloaded media to ${localPath}`);
+
+      return {
+        localPath,
+        fileName,
+        mimeType
+      };
+    } catch (err: any) {
+      this.log.error(`[whatsapp] Error downloading media: ${err.message}`);
+      return null;
+    }
   }
 
   async stop(): Promise<void> {
@@ -105,16 +154,25 @@ export class WhatsAppAdapter implements ChannelAdapter {
       return;
     }
 
+    const formattedText = this.formatForWhatsApp(payload.text);
+
     if (payload.file) {
       await this.socket.sendMessage(to, {
         document: payload.file.data,
         mimetype: payload.file.mimeType,
         fileName: payload.file.name,
-        caption: payload.text,
+        caption: formattedText,
       });
     } else {
-      await this.socket.sendMessage(to, { text: payload.text });
+      await this.socket.sendMessage(to, { text: formattedText });
     }
+  }
+
+  private formatForWhatsApp(text: string): string {
+    return text
+      .replace(/\*\*/g, "*") // Convert Markdown bold to WhatsApp bold
+      .replace(/^#+\s+/gm, "") // Remove Markdown headers
+      .trim();
   }
 
   async sendPresence(to: string, type: "typing" | "recording" | "available" | "paused"): Promise<void> {
@@ -139,6 +197,8 @@ export class WhatsAppAdapter implements ChannelAdapter {
       m.extendedTextMessage?.text ??
       m.imageMessage?.caption ??
       m.videoMessage?.caption ??
+      m.documentMessage?.caption ??
+      m.documentWithCaptionMessage?.message?.documentMessage?.caption ??
       null
     );
   }

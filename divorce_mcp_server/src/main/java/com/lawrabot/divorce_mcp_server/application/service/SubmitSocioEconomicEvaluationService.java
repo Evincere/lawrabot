@@ -28,12 +28,13 @@ public class SubmitSocioEconomicEvaluationService implements SubmitSocioEconomic
     }
 
     @Override
-    public void execute(UUID expedienteId,
-                        BigDecimal monthlyIncomeArs,
-                        HousingSituationEnum housingSituation,
-                        Integer vehiclesRegistered,
-                        boolean hasFormalEmployment,
-                        String observations) {
+    public boolean execute(UUID expedienteId,
+                           BigDecimal monthlyIncomeArs,
+                           HousingSituationEnum housingSituation,
+                           String occupation,
+                           Integer vehiclesRegistered,
+                           boolean hasFormalEmployment,
+                           String observations) {
 
         Expediente expediente = repository.findById(expedienteId)
                 .orElseThrow(() -> new IllegalArgumentException("Expediente no encontrado: " + expedienteId));
@@ -47,8 +48,9 @@ public class SubmitSocioEconomicEvaluationService implements SubmitSocioEconomic
                 .scrapingJustification(existingProfile != null ? existingProfile.getScrapingJustification() : null)
                 .monthlyIncomeArs(monthlyIncomeArs)
                 .housingSituation(housingSituation)
+                .occupation(occupation)
                 .vehiclesRegistered(vehiclesRegistered)
-                .hasFormatEmployment(hasFormalEmployment)
+                .hasFormalEmployment(hasFormalEmployment)
                 .defensoriaObservations(observations)
                 .build();
 
@@ -60,5 +62,6 @@ public class SubmitSocioEconomicEvaluationService implements SubmitSocioEconomic
         expediente.evaluateDefensoriaCriteria(updatedProfile, approved);
 
         repository.save(expediente);
+        return approved;
     }
 }

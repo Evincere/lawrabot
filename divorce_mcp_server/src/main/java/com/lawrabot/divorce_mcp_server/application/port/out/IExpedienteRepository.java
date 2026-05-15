@@ -30,4 +30,9 @@ public interface IExpedienteRepository {
      * Busca un expediente activo vinculado a un DNI específico (sea peticionante o socioeconómico).
      */
     Optional<Expediente> findActiveByDni(String dni);
+
+    /**
+     * Obtiene el listado completo de expedientes (trámites de divorcio).
+     */
+    java.util.List<Expediente> findAll();
 }

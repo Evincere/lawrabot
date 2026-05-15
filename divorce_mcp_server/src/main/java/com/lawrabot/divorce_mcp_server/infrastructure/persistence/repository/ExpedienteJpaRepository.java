@@ -46,14 +46,22 @@ public class ExpedienteJpaRepository implements IExpedienteRepository {
     @Override
     @Transactional(readOnly = true)
     public Optional<Expediente> findActiveByClientPhone(String phoneNumber) {
-        // Un expediente se considera "activo" si no está cerrado
+        // Normalización: aseguramos que buscamos por el valor de 10 dígitos (ej: 261XXXXXXX)
+        // ya que así lo guarda PhoneNumberVO.getValue()
+        String normalizedPhone = com.lawrabot.divorce_mcp_server.domain.valueobject.PhoneNumberVO.of(phoneNumber).getValue();
+
         List<ExpedienteStatusEnum> activeStatuses = Arrays.asList(
             ExpedienteStatusEnum.BLSG_PRECONSULTA,
             ExpedienteStatusEnum.IN_DATA_COLLECTION_PROGRESS,
-            ExpedienteStatusEnum.DATA_COMPLETE
+            ExpedienteStatusEnum.DATA_COMPLETE,
+            ExpedienteStatusEnum.BLSG_RECHAZADO,
+            ExpedienteStatusEnum.WAITING_SIGNATURE,
+            ExpedienteStatusEnum.READY_FOR_PORTAL,
+            ExpedienteStatusEnum.OBSERVATIONS_PENDING,
+            ExpedienteStatusEnum.DOCUMENTS_GENERATED
         );
         
-        return springDataRepository.findFirstByContactPhoneNumberPhoneNumberAndStatusIn(phoneNumber, activeStatuses)
+        return springDataRepository.findFirstByContactPhoneNumberPhoneNumberAndStatusIn(normalizedPhone, activeStatuses)
                 .map(mapper::toDomain);
     }
 
@@ -63,10 +71,23 @@ public class ExpedienteJpaRepository implements IExpedienteRepository {
         List<ExpedienteStatusEnum> activeStatuses = Arrays.asList(
             ExpedienteStatusEnum.BLSG_PRECONSULTA,
             ExpedienteStatusEnum.IN_DATA_COLLECTION_PROGRESS,
-            ExpedienteStatusEnum.DATA_COMPLETE
+            ExpedienteStatusEnum.DATA_COMPLETE,
+            ExpedienteStatusEnum.BLSG_RECHAZADO,
+            ExpedienteStatusEnum.WAITING_SIGNATURE,
+            ExpedienteStatusEnum.READY_FOR_PORTAL,
+            ExpedienteStatusEnum.OBSERVATIONS_PENDING,
+            ExpedienteStatusEnum.DOCUMENTS_GENERATED
         );
         
         return springDataRepository.findFirstByDniAndStatusIn(dni, activeStatuses)
                 .map(mapper::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Expediente> findAll() {
+        return springDataRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(mapper::toDomain)
+                .collect(java.util.stream.Collectors.toList());
     }
 }

@@ -1,5 +1,6 @@
 package com.lawrabot.divorce_mcp_server.domain.model;
 
+import com.lawrabot.divorce_mcp_server.domain.valueobject.DNIVO;
 import com.lawrabot.divorce_mcp_server.domain.valueobject.AddressVO;
 import com.lawrabot.divorce_mcp_server.domain.valueobject.CuilVO;
 import com.lawrabot.divorce_mcp_server.domain.valueobject.FullNameVO;
@@ -22,6 +23,9 @@ public class Spouse {
     // Datos obligatorios
     private FullNameVO name;
     
+    @Nullable
+    private DNIVO dni;
+    
     // El teléfono es obligatorio para el peticionante pero opcional para el demandado inicial.
     @Nullable
     private PhoneNumberVO phoneNumber;
@@ -32,7 +36,13 @@ public class Spouse {
     @Nullable
     private AddressVO address;
     @Nullable
+    private String nationality;
+    @Nullable
+    private String email;
+    @Nullable
     private String profession;
+    @Nullable
+    private java.time.LocalDate birthDate;
 
     /**
      * Fábrica para crear un cónyuge a partir de su nombre.

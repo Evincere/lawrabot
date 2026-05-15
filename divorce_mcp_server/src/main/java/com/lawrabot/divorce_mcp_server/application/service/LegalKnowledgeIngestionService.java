@@ -20,6 +20,7 @@ import java.util.Scanner;
  */
 @Service
 @Slf4j
+@org.springframework.context.annotation.Profile("!test")
 public class LegalKnowledgeIngestionService implements CommandLineRunner {
 
     private final VectorStore vectorStore;

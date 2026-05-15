@@ -54,9 +54,11 @@ public final class PhoneNumberVO {
             normalized = normalized.substring(3); // Remove country code
         }
 
-        if (normalized.length() != 10) {
+        // RELAXED VALIDATION: Accept IDs between 7 and 15 digits to support LIDs (Linked Identity)
+        // Argentine local numbers are 10 digits. LIDs observed are ~15 digits.
+        if (normalized.length() < 7 || normalized.length() > 15) {
             throw new IllegalArgumentException(
-                "Invalid phone number format. Expected 10 digits (e.g., 2614123456), got: " + rawValue
+                "Invalid phone number format. Expected 7-15 digits (e.g., 2614123456 or LID format), got: " + rawValue
             );
         }
 
@@ -76,19 +78,27 @@ public final class PhoneNumberVO {
      * Format: 5492614123456 (with country code, no +)
      */
     public String toWhatsAppFormat() {
-        return "549" + value;
+        // If it looks like a standard Argentine number (10 digits), prepend country code
+        if (value.length() == 10) {
+            return "549" + value;
+        }
+        // Otherwise, return as is (LID format)
+        return value;
     }
 
     /**
      * Returns formatted for display.
-     * Format: +54 9 261 412-3456
+     * Format: +54 9 261 412-3456 or raw value if not standard.
      */
     public String toDisplayFormat() {
-        return String.format("+54 9 %s %s-%s",
-            value.substring(0, 3),
-            value.substring(3, 6),
-            value.substring(6, 10)
-        );
+        if (value.length() == 10) {
+            return String.format("+54 9 %s %s-%s",
+                value.substring(0, 3),
+                value.substring(3, 6),
+                value.substring(6, 10)
+            );
+        }
+        return value;
     }
 
     /**

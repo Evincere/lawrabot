@@ -15,5 +15,5 @@ public interface ProcessBlsgScrapingResultUseCase {
      * @param result          Resultado del scraping (aprobado, rechazado, inconcluyente).
      * @param justification   Texto descriptivo devuelto por el sistema judicial (puede ser nulo).
      */
-    void execute(UUID expedienteId, BlsgScrapingResultEnum result, String justification);
+    void execute(UUID expedienteId, BlsgScrapingResultEnum result, String justification, String fullName, String dni, String cuil, String birthDate, String province, String sex, String certificatePath);
 }

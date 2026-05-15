@@ -27,4 +27,8 @@ public interface SpringDataExpedienteRepository extends JpaRepository<Expediente
     Optional<ExpedienteJpaEntity> findFirstByDniAndStatusIn(
             @Param("dni") String dni,
             @Param("statuses") List<ExpedienteStatusEnum> statuses);
+
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"petitioner", "respondent", "socioEconomicProfile", "regulatoryAgreement", "participants", "participants.citizen"})
+    @Query("SELECT e FROM ExpedienteJpaEntity e WHERE e.status <> com.lawrabot.divorce_mcp_server.domain.enums.ExpedienteStatusEnum.ARCHIVED ORDER BY e.createdAt DESC")
+    List<ExpedienteJpaEntity> findAllByOrderByCreatedAtDesc();
 }

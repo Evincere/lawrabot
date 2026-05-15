@@ -1,26 +1,19 @@
 package com.lawrabot.divorce_mcp_server.infrastructure.config;
 
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Propiedades de configuración para el portal BLSG.
- * Resuelve las advertencias de "unknown property" en application.properties.
+ * Configuración para el Portal BLSG (Beneficio de Litigar Sin Gastos).
  */
-@Getter
-@Setter
 @Configuration
 @ConfigurationProperties(prefix = "blsg.portal")
+@Data
 public class BlsgProperties {
-    /**
-     * Nombre de usuario/email para el portal.
-     */
     private String username;
-
-    /**
-     * Contraseña para el portal.
-     */
     private String password;
+    private boolean headless = true;
+    private String storagePath = "storage/session/";
+    private int timeoutMs = 35000;
 }

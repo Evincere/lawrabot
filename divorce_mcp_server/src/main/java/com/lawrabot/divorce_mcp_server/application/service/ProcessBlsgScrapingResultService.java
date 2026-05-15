@@ -16,12 +16,12 @@ public class ProcessBlsgScrapingResultService implements ProcessBlsgScrapingResu
     }
 
     @Override
-    public void execute(UUID expedienteId, BlsgScrapingResultEnum result, String justification) {
+    public void execute(UUID expedienteId, BlsgScrapingResultEnum result, String justification, String fullName, String dni, String cuil, String birthDate, String province, String sex, String certificatePath) {
         Expediente expediente = repository.findById(expedienteId)
                 .orElseThrow(() -> new IllegalArgumentException("Expediente no encontrado: " + expedienteId));
 
-        // La lógica de negocio (rechazo, avance de etapa) vive en el Dominio.
-        expediente.processScrapingResult(result, justification);
+        // Delegamos la lógica de actualización multivariable al Dominio
+        expediente.processScrapingResult(result, justification, fullName, dni, cuil, birthDate, province, sex, certificatePath);
 
         repository.save(expediente);
     }

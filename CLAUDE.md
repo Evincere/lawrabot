@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Architecture:**
 - **Agent Frontend** (`agent/`): Node.js/TypeScript agent using TemplateClaw framework; handles WhatsApp (Baileys) and Telegram (grammY) channels
 - **Backend Legal MCP Server** (`divorce_mcp_server/`): Java/Spring Boot + Spring AI; provides MCP tools for legal document generation, BLSG integration, and RAG
+- **Admin Dashboard** (`admin_dashboard/`): Next.js 16 (App Router) operation center for human validation and case management.
 - **Infrastructure**: PostgreSQL 17 + PGVector (RAG embeddings), Redis (sessions), Docker Compose
 
 **External Integrations:**
@@ -107,6 +108,11 @@ specs/my-spec/
 - File naming: kebab-case directories, camelCase files
 - Classes: PascalCase, Functions: camelCase, Constants: camelCase (objects), UPPER_CASE (primitives)
 - Logging: Use `createLogger("templateclaw")` — never `console.log`
+- **Language Policy**:
+    - **Conversations**: Always Spanish.
+    - **Code**: Always English.
+    - **Comments**: Always Spanish.
+- **Value Objects (Java)**: If a VO (e.g., `CuilVO`) fails to compile with Lombok, refactor to `final class` with manual `private final` field and `getValue()` getter. Avoid Lombok in VOs if build errors persist.
 
 ### MCP Server Structure (`divorce_mcp_server/src/main/java/`)
 

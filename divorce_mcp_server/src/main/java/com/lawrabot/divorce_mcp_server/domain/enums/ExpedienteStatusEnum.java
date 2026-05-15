@@ -40,12 +40,16 @@ public enum ExpedienteStatusEnum {
     // Document generation
     DOCUMENTS_GENERATED, // Drafts created, ready for lawyer review
 
-    // Review phase
-    UNDER_REVIEW, // Lawyer reviewing documents
+    // Review and Signature phase (File Watcher Flow)
+    WAITING_SIGNATURE, // Documents generated in /drafts, waiting for lawyer to sign
+    READY_FOR_PORTAL, // Signed PDF detected in /signed, ready to upload to judicial portal
     OBSERVATIONS_PENDING, // Lawyer sent observations, waiting for user
 
     // Final phases
     SUBMITTED, // Lawyer approved, presented to court
     IN_PROCEDURE, // Court accepted, in judicial process
-    FINALIZED // Divorce finalized/sentenced
+    FINALIZED, // Divorce finalized/sentenced
+
+    // Admin / Cleanup
+    ARCHIVED // Soft-deleted, hidden from main view
 }

@@ -1,11 +1,12 @@
 package com.lawrabot.divorce_mcp_server.infrastructure.config;
 
 import com.lawrabot.divorce_mcp_server.application.port.in.*;
-import com.lawrabot.divorce_mcp_server.application.port.out.IExpedienteRepository;
-import com.lawrabot.divorce_mcp_server.application.port.out.ISpouseRepository;
+import com.lawrabot.divorce_mcp_server.application.port.out.*;
 import com.lawrabot.divorce_mcp_server.application.service.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
 
 /**
  * Punto de entrada de Spring para la capa de Aplicación.
@@ -69,5 +70,15 @@ public class UseCaseConfig {
     public GetExpedienteCollectionStageUseCase getExpedienteCollectionStageUseCase(
             IExpedienteRepository expedienteRepo) {
         return new GetExpedienteCollectionStageService(expedienteRepo);
+    }
+
+    @Bean
+    public ManageObservationsUseCase manageObservationsUseCase(
+            IObservationRepository observationRepo,
+            ITaskRepository taskRepo,
+            IExpedienteRepository expedienteRepo,
+            WebClient.Builder webClientBuilder,
+            @Value("${lawrabot.agent.push-url:http://localhost:18789/push}") String agentPushUrl) {
+        return new ObservationService(observationRepo, taskRepo, expedienteRepo, webClientBuilder, agentPushUrl);
     }
 }

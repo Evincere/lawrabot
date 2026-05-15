@@ -18,7 +18,7 @@ export const LLMConfigSchema = z.object({
   provider: z.enum(["ollama"]).default("ollama"),
   model: z.string().default("qwen3.5:cloud"),
   baseUrl: z.string().default("http://localhost:11434"),
-  apiKey: z.string().optional(),
+  apiKey: z.union([z.string(), z.array(z.string())]).optional(),
   temperature: z.number().min(0).max(2).default(0.7),
   maxTokens: z.number().positive().default(4096),
 });

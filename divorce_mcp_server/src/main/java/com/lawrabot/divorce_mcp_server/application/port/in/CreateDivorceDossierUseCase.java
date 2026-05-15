@@ -9,12 +9,13 @@ import com.lawrabot.divorce_mcp_server.domain.model.Expediente;
 public interface CreateDivorceDossierUseCase {
 
     /**
-     * Orquesta la creación inical de un expediente tomando el WhatsApp 
+     * Orquesta la creación inical de un expediente tomando el WhatsApp
      * y los datos primarios del solicitante.
-     * 
+     *
      * @param clientPhone Teléfono del solicitante (formato internacional)
      * @param firstName Nombre de pila
      * @param lastName Apellido
+     * @param dni DNI del solicitante, ya obtenido durante la consulta BLSG
      */
-    Expediente execute(String clientPhone, String firstName, String lastName);
+    Expediente execute(String clientPhone, String firstName, String lastName, String dni);
 }

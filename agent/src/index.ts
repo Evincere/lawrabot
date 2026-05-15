@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import path from "node:path";
+import fs from "node:fs";
 import { loadConfig } from "./config/loader.js";
 import { createLogger } from "./utils/logger.js";
 import { startGateway } from "./gateway/server.js";
@@ -19,7 +20,10 @@ program
   .option("--port <number>", "Override HTTP port")
   .action(async (opts: { spec: string; port?: string }) => {
     const log = createLogger("templateclaw");
-    const specDir = path.resolve(opts.spec);
+    let specDir = path.resolve(opts.spec);
+    if (fs.existsSync(specDir) && fs.statSync(specDir).isFile()) {
+      specDir = path.dirname(specDir);
+    }
 
     try {
       // Load config from spec directory
@@ -57,7 +61,10 @@ program
   .requiredOption("--spec <path>", "Path to the specialization directory")
   .action(async (opts: { spec: string }) => {
     const log = createLogger("templateclaw");
-    const specDir = path.resolve(opts.spec);
+    let specDir = path.resolve(opts.spec);
+    if (fs.existsSync(specDir) && fs.statSync(specDir).isFile()) {
+      specDir = path.dirname(specDir);
+    }
 
     try {
       const config = loadConfig(specDir);

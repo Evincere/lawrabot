@@ -8,10 +8,16 @@
   },
   llm: {
     provider: "ollama",
-    model: "qwen3.5:cloud",
+    model: "gpt-oss:120b-cloud",
     baseUrl: "https://ollama.com", // Endpoint oficial para Ollama Cloud
-    apiKey: "4dd28d78474741e2bf1914be01cb1f77.Skb86hog_uTneKPhlsI8fRr8", // Reemplazar con el Token de ollama.com/settings/keys
+    apiKey: [
+      "50737088ad104daf988f7d613e29fc25.K6hEHg0r8-vwfKLo_0a2lps3",
+      "c38c6daab834400b8f0b1e40b6139b0c.aQKbhKnBWCGjzG9FNFWYGnbP",
+      "326c6f9b13f14b09a9bbfccb2e3b442c.uPsPmnUYA9DXKE0MkvZpJiPF",
+      "2b476d3445b94048bb56f4413ab4e7eb.1yj6ugIpMbIlSKWs40F5byFA",
+    ],
     temperature: 0.1,
+    maxTokens: 500,
   },
   sessions: {
     persistDir: ".data/sessions-divorce",
@@ -20,7 +26,7 @@
   mcpServers: [
     {
       name: "LawraBot-Legal-Server",
-      url: "http://localhost:8081/mcp/sse",
+      url: "http://127.0.0.1:8081/mcp/sse",
       enabled: true,
     },
   ],

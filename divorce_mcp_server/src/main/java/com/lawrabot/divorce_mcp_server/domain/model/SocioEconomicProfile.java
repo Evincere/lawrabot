@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.springframework.lang.Nullable;
 
 import java.math.BigDecimal;
@@ -17,6 +18,7 @@ import java.util.UUID;
  * Beneficio de Litigar Sin Gastos (BLSG).
  */
 @Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
@@ -50,8 +52,10 @@ public class SocioEconomicProfile {
     private HousingSituationEnum housingSituation;
     @Nullable
     private Integer vehiclesRegistered;
+    @Nullable
+    private String occupation;
     @Builder.Default
-    private boolean hasFormatEmployment = false;
+    private boolean hasFormalEmployment = false;
 
     // Fase 3: Evaluación Defensoría
     @Nullable
@@ -66,7 +70,7 @@ public class SocioEconomicProfile {
         return SocioEconomicProfile.builder()
                 .id(UUID.randomUUID())
                 .scrapingResult(BlsgScrapingResultEnum.INCONCLUSIVE)
-                .hasFormatEmployment(false)
+                .hasFormalEmployment(false)
                 .build();
     }
 
@@ -82,11 +86,12 @@ public class SocioEconomicProfile {
         this.certificatePath = certificatePath;
     }
 
-    public void submitEvaluation(BigDecimal income, HousingSituationEnum housing, Integer vehicles, boolean employment) {
+    public void submitEvaluation(BigDecimal income, HousingSituationEnum housing, String occupation, Integer vehicles, boolean employment) {
         this.monthlyIncomeArs = income;
         this.housingSituation = housing;
+        this.occupation = occupation;
         this.vehiclesRegistered = vehicles;
-        this.hasFormatEmployment = employment;
+        this.hasFormalEmployment = employment;
     }
 
     // Reglas de Negocio para el proceso interactivo

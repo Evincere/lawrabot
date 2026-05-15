@@ -13,7 +13,41 @@
       "Bash(mkdir:*)",
       "Bash(npm list:*)",
       "Bash(npm install:*)",
-      "Bash(adr-log -d .)"
+      "Bash(adr-log -d .)",
+      "Bash(claude mcp:*)",
+      "Bash(npx playwright:*)",
+      "Bash(file:*)",
+      "mcp__ide__executeCode",
+      "Bash(pip install:*)",
+      "Bash(./mvnw compile:*)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('deps:', list\\(d.get\\('dependencies',{}\\).keys\\(\\)\\)\\); print\\('devDeps:', list\\(d.get\\('devDependencies',{}\\).keys\\(\\)\\)\\)\")"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd agent && npm run check",
+            "if": "Edit(agent/**/*.ts)|Write(agent/**/*.ts)",
+            "statusMessage": "Verificando tipos TypeScript..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "El usuario está intentando editar un archivo .env. Debes advertirle que estos archivos contienen secrets (API keys, contraseñas) y no deben editarse directamente. Pregunta si realmente quiere continuar.",
+            "if": "Edit(**/.env*)|Write(**/.env*)"
+          }
+        ]
+      }
     ]
   }
 }

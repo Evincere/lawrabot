@@ -7,6 +7,12 @@ import type {
   LLMToolCall,
 } from "./types.js";
 
+interface ApiKeyStatus {
+  key: string;
+  rateLimitedUntil: number;
+}
+
+
 /**
  * Ollama LLM provider — communicates via the Ollama REST API.
  * Supports tool calling via the /api/chat endpoint.
@@ -16,18 +22,47 @@ export class OllamaProvider implements LLMProvider {
   readonly name = "Ollama";
   private baseUrl: string;
   private model: string;
-  private apiKey?: string;
+  private keys: ApiKeyStatus[] = [];
   private defaultTemp: number;
   private defaultMaxTokens: number;
 
   constructor(config: LLMConfig, private readonly log: Logger) {
     this.baseUrl = config.baseUrl.replace(/\/+$/, "");
     this.model = config.model;
-    this.apiKey = config.apiKey;
+    
+    if (config.apiKey) {
+      if (Array.isArray(config.apiKey)) {
+        this.keys = config.apiKey.map(k => ({ key: k, rateLimitedUntil: 0 }));
+      } else {
+        this.keys = [{ key: config.apiKey, rateLimitedUntil: 0 }];
+      }
+    }
+    
     this.defaultTemp = config.temperature;
     this.defaultMaxTokens = config.maxTokens;
-    this.log.info(`Ollama provider initialized: ${this.model} @ ${this.baseUrl} (Auth: ${this.apiKey ? "YES" : "NO"})`);
+    this.log.info(`Ollama provider initialized: ${this.model} @ ${this.baseUrl} (Keys available: ${this.keys.length})`);
   }
+
+  private getActiveKey(): string | undefined {
+    if (this.keys.length === 0) return undefined;
+    const now = Date.now();
+    for (const k of this.keys) {
+      if (k.rateLimitedUntil < now) {
+        return k.key;
+      }
+    }
+    return undefined; // All keys are exhausted
+  }
+
+  private markKeyRateLimited(keyStr: string) {
+    const k = this.keys.find(x => x.key === keyStr);
+    if (k) {
+      const freezeTimeHours = 1;
+      k.rateLimitedUntil = Date.now() + freezeTimeHours * 60 * 60 * 1000;
+      this.log.warn(`Ollama API key (ends with ...${keyStr.slice(-4)}) reached rate limit. Freezing for ${freezeTimeHours} hour(s).`);
+    }
+  }
+
 
   async complete(request: LLMCompletionRequest): Promise<LLMCompletionResponse> {
     const body: Record<string, unknown> = {
@@ -36,6 +71,18 @@ export class OllamaProvider implements LLMProvider {
         const msg: Record<string, unknown> = { role: m.role, content: m.content };
         if (m.tool_call_id) {
           msg.tool_call_id = m.tool_call_id;
+        }
+        // Preservar tool_calls en mensajes de assistant para que el LLM
+        // sepa qué herramientas ya invocó y no las repita en bucle.
+        if (m.tool_calls && m.tool_calls.length > 0) {
+          msg.tool_calls = m.tool_calls.map((tc) => ({
+            function: {
+              name: tc.function.name,
+              arguments: typeof tc.function.arguments === "string"
+                ? JSON.parse(tc.function.arguments)
+                : tc.function.arguments,
+            },
+          }));
         }
         return msg;
       }),
@@ -52,26 +99,44 @@ export class OllamaProvider implements LLMProvider {
 
     this.log.debug(`Sending request to Ollama: ${this.model}`);
 
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
+    const maxAttempts = this.keys.length > 0 ? this.keys.length : 1;
+    let attempt = 0;
 
-    if (this.apiKey) {
-      headers["Authorization"] = `Bearer ${this.apiKey}`;
-    }
+    while (attempt < maxAttempts) {
+      attempt++;
+      const currentKey = this.getActiveKey();
 
-    const response = await fetch(`${this.baseUrl}/api/chat`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
+      if (this.keys.length > 0 && !currentKey) {
+        throw new Error("All Ollama API keys are currently rate-limited (429). Please try again later.");
+      }
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "unknown error");
-      throw new Error(`Ollama API error ${response.status}: ${errorText}`);
-    }
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
 
-    const data = (await response.json()) as OllamaChatResponse;
+      if (currentKey) {
+        headers["Authorization"] = `Bearer ${currentKey}`;
+      }
+
+      const response = await fetch(`${this.baseUrl}/api/chat`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        if (response.status === 429 && currentKey) {
+          this.markKeyRateLimited(currentKey);
+          if (attempt < maxAttempts) {
+            this.log.info(`Retrying Ollama request with next available key (Attempt ${attempt + 1}/${maxAttempts})...`);
+            continue; // Intentar con la siguiente key
+          }
+        }
+        const errorText = await response.text().catch(() => "unknown error");
+        throw new Error(`Ollama API error ${response.status}: ${errorText}`);
+      }
+
+      const data = (await response.json()) as OllamaChatResponse;
 
     const toolCalls: LLMToolCall[] = [];
     if (data.message?.tool_calls) {
@@ -101,6 +166,9 @@ export class OllamaProvider implements LLMProvider {
         : undefined,
       finishReason: hasToolCalls ? "tool_calls" : "stop",
     };
+    } // End of while loop
+
+    throw new Error("Ollama API failed after exhausting available keys.");
   }
 }
 

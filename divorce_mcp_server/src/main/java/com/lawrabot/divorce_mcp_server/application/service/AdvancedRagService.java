@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @Slf4j
+@org.springframework.context.annotation.Profile("!test")
 public class AdvancedRagService {
 
     private final ChatModel chatModel;

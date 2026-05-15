@@ -24,6 +24,7 @@ import java.util.UUID;
 public class ChildJpaEntity {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(columnDefinition = "uuid")
     private UUID id;
 

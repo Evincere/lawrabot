@@ -4,6 +4,7 @@ import com.lawrabot.divorce_mcp_server.application.port.in.ValidateAgreementLega
 import com.lawrabot.divorce_mcp_server.application.port.out.IExpedienteRepository;
 import com.lawrabot.divorce_mcp_server.domain.model.Expediente;
 import com.lawrabot.divorce_mcp_server.domain.model.RegulatoryAgreement;
+import com.lawrabot.divorce_mcp_server.domain.model.Spouse;
 import com.lawrabot.divorce_mcp_server.domain.model.agreement.*;
 
 import java.util.ArrayList;
@@ -74,7 +75,17 @@ public class ValidateAgreementService implements ValidateAgreementLegalityUseCas
         }
         
         // --- Cónyuges ---
-        if (expediente.getPetitioner() == null || expediente.getRespondent() == null) {
+        Spouse petitioner = expediente.getPetitioner();
+        boolean petitionerIncomplete = petitioner == null || 
+                                     petitioner.getDni() == null ||
+                                     petitioner.getAddress() == null;
+                                     
+        Spouse respondent = expediente.getRespondent();
+        boolean respondentIncomplete = respondent == null || 
+                                     respondent.getDni() == null ||
+                                     respondent.getAddress() == null;
+
+        if (petitionerIncomplete || respondentIncomplete) {
             alertsToBot.add("MISSING_SPOUSE_DATA");
         }
 

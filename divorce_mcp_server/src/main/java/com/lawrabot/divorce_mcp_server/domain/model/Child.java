@@ -7,6 +7,7 @@ import lombok.Getter;
 import org.springframework.lang.Nullable;
 
 import java.time.LocalDate;
+import java.time.Period;
 import java.util.UUID;
 
 /**
@@ -26,18 +27,28 @@ public class Child {
     private final DNIVO dni;
 
     @Builder.Default
-    private boolean disabled = false;
+    private boolean disabled = false;   
 
-    /**
-     * Factory method para crear un hijo a partir de los datos básicos.
-     */
-    public static Child create(FullNameVO name, LocalDate birthDate, @Nullable DNIVO dni, boolean disabled) {
+    @Nullable
+    private final String birthCertificateId;
+
+    public static Child create(FullNameVO name, LocalDate birthDate, @Nullable DNIVO dni, boolean disabled, @Nullable String birthCertificateId) {
         return Child.builder()
                 .id(UUID.randomUUID())
                 .name(name)
                 .birthDate(birthDate)
                 .dni(dni)
                 .disabled(disabled)
+                .birthCertificateId(birthCertificateId)
                 .build();
+    }
+
+    public String getFullName() {
+        return name != null ? name.getFullName() : "S/D";
+    }
+
+    public int getAge() {
+        if (birthDate == null) return 0;
+        return Period.between(birthDate, LocalDate.now()).getYears();
     }
 }

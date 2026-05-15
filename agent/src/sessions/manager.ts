@@ -56,12 +56,21 @@ export class SessionManager {
   }
 
   /** Get messages formatted for LLM context. */
-  getContextMessages(session: Session): Array<{ role: "user" | "assistant" | "system" | "tool"; content: string; tool_call_id?: string }> {
-    return session.messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-      tool_call_id: msg.role === "tool" ? (msg as any).toolCallId : undefined,
-    }));
+  getContextMessages(session: Session): Array<{ role: "user" | "assistant" | "system" | "tool"; content: string; tool_calls?: any[]; tool_call_id?: string }> {
+    return session.messages.map((msg) => {
+      if (msg.role === "tool") {
+        return {
+          role: "tool",
+          content: msg.content,
+          tool_call_id: msg.toolCallId,
+        };
+      }
+      return {
+        role: msg.role,
+        content: msg.content,
+        tool_calls: msg.toolCalls,
+      };
+    });
   }
 
   /** Reset a session (clear history). */

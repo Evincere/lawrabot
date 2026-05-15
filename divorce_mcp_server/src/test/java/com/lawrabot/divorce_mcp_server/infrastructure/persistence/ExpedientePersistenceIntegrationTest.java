@@ -15,7 +15,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
+@SpringBootTest(properties = "spring.autoconfigure.exclude=org.springframework.ai.autoconfigure.vectorstore.pgvector.PgVectorStoreAutoConfiguration")
 @ActiveProfiles("test")
 @Transactional
 class ExpedientePersistenceIntegrationTest {
@@ -31,7 +31,7 @@ class ExpedientePersistenceIntegrationTest {
                 .id(java.util.UUID.randomUUID())
                 .contactPhoneNumber(phone)
                 .status(ExpedienteStatusEnum.IN_DATA_COLLECTION_PROGRESS)
-                .collectionStage(DataCollectionStageEnum.PENDING_BASIC_INFO)
+                .collectionStage(DataCollectionStageEnum.PENDING_PERSONAL_DATA)
                 .createdAt(java.time.LocalDateTime.now())
                 .build();
 

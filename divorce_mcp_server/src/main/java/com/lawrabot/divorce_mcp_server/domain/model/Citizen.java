@@ -30,6 +30,10 @@ public class Citizen {
     @Nullable
     private String email;
     @Nullable
+    private String nationality;
+    @Nullable
+    private String occupation;
+    @Nullable
     private AddressVO address;
 
     private final LocalDateTime createdAt;
@@ -45,10 +49,12 @@ public class Citizen {
                 .build();
     }
 
-    public void updateContactInfo(@Nullable PhoneNumberVO phone, @Nullable String email, @Nullable AddressVO address) {
+    public void updateContactInfo(@Nullable PhoneNumberVO phone, @Nullable String email, @Nullable AddressVO address, @Nullable String nationality, @Nullable String occupation) {
         this.phoneNumber = phone;
         this.email = email;
         this.address = address;
+        this.nationality = nationality;
+        this.occupation = occupation;
         this.updatedAt = LocalDateTime.now();
     }
 }

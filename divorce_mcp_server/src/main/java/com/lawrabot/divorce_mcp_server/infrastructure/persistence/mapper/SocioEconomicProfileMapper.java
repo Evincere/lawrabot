@@ -26,7 +26,8 @@ public class SocioEconomicProfileMapper {
                 .monthlyIncomeArs(domain.getMonthlyIncomeArs())
                 .housingSituation(domain.getHousingSituation())
                 .vehiclesRegistered(domain.getVehiclesRegistered())
-                .hasFormalEmployment(domain.isHasFormatEmployment())
+                .occupation(domain.getOccupation())
+                .hasFormalEmployment(domain.isHasFormalEmployment())
                 .defensoriaObservations(domain.getDefensoriaObservations())
                 .blsgApprovedByDefensoria(domain.getBlsgApprovedByDefensoria())
                 .build();
@@ -48,7 +49,8 @@ public class SocioEconomicProfileMapper {
                 .monthlyIncomeArs(entity.getMonthlyIncomeArs())
                 .housingSituation(entity.getHousingSituation())
                 .vehiclesRegistered(entity.getVehiclesRegistered())
-                .hasFormatEmployment(entity.getHasFormalEmployment() != null && entity.getHasFormalEmployment())
+                .occupation(entity.getOccupation())
+                .hasFormalEmployment(entity.getHasFormalEmployment() != null && entity.getHasFormalEmployment())
                 .defensoriaObservations(entity.getDefensoriaObservations())
                 .blsgApprovedByDefensoria(entity.getBlsgApprovedByDefensoria())
                 .build();
