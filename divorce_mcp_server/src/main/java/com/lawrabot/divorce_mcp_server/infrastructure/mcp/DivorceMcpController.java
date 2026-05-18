@@ -244,7 +244,7 @@ public class DivorceMcpController {
         submitPersonalDataUseCase.execute(phoneNumber, com.lawrabot.divorce_mcp_server.domain.enums.CaseRole.RESPONDENT, 
                 fullName, dni, participantPhone, nationality, occupation, email, birthDate, addressVO);
         
-        return "Datos de la contraparte registrados. [NEXT_STEP] Pide al usuario la evaluación socioeconómica: empleo formal (sí/no), ingreso mensual aproximado, tipo de vivienda (alquilada/propia/familiar), cantidad de vehículos. Incluye en el MISMO mensaje la solicitud de certificado negativo de ANSES o bono de sueldo según corresponda. NO pidas datos del matrimonio todavía.";
+        return "Datos de la contraparte registrados. [NEXT_STEP] Pide al usuario SOLO la evaluación socioeconómica: empleo formal (sí/no), ingreso mensual aproximado, tipo de vivienda (alquilada/propia/familiar), cantidad de vehículos. NO menciones documentos de ingresos todavía. NO pidas datos del matrimonio todavía.";
     }
 
     @Tool(name = "submit_marriage_details", description = "Guarda los detalles del matrimonio en el expediente.")
@@ -280,10 +280,13 @@ public class DivorceMcpController {
     @Tool(name = "submit_children_info", description = "Carga la información de los hijos al expediente.")
     public String submitChildrenInfo(
             @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
-            @JsonPropertyDescription("Lista de hijos") List<ChildDto> childrenList) {
+            @JsonPropertyDescription("Lista de hijos. Cada elemento debe tener: fullName (String), birthDate (String YYYY-MM-DD), dni (String, opcional), disabled (boolean).") List<ChildDto> children) {
             
         UUID expedienteId = resolveExpedienteId(phoneNumber);
-        List<Child> children = childrenList == null ? Collections.emptyList() : childrenList.stream().map(dto -> {
+        if (children == null || children.isEmpty()) {
+            return "Error: La lista de hijos está vacía. Debes incluir al menos un hijo con su nombre completo (fullName), fecha de nacimiento (birthDate) y DNI (dni).";
+        }
+        List<Child> domainChildren = children.stream().map(dto -> {
             FullNameVO name = FullNameVO.fromFullString(dto.fullName());
             DNIVO dniVO = (dto.dni() != null && !dto.dni().isBlank()) ? DNIVO.of(dto.dni()) : null;
             LocalDate bDate = (dto.birthDate() != null && !dto.birthDate().isBlank()) ? LocalDate.parse(dto.birthDate())
@@ -296,8 +299,8 @@ public class DivorceMcpController {
                     .build();
         }).collect(Collectors.toList());
 
-        submitChildrenInfoUseCase.execute(expedienteId, children);
-        return "Datos del/los hijo(s) registrados. [NEXT_STEP] PREGUNTA al usuario que envíe el Acta de Nacimiento de cada hijo menor (foto o PDF) por este chat. Una vez recibidas, pregunta brevemente qué propone para el convenio regulador (cuidado personal de los hijos, alimentos y atribución de vivienda/bienes). PROHIBIDO llamar a submit_digital_evidence ahora — solo podés llamarla cuando el usuario ENVÍE el archivo y veas [MEDIA] en su mensaje.";
+        submitChildrenInfoUseCase.execute(expedienteId, domainChildren);
+        return "Datos del/los hijo(s) registrados correctamente (" + domainChildren.size() + " hijo(s)). [NEXT_STEP] PREGUNTA al usuario que envíe el Acta de Nacimiento de cada hijo menor (foto o PDF) por este chat. Una vez recibidas, pregunta brevemente qué propone para el convenio regulador (cuidado personal de los hijos, alimentos y atribución de vivienda/bienes). PROHIBIDO llamar a submit_digital_evidence ahora — solo podés llamarla cuando el usuario ENVÍE el archivo y veas [MEDIA] en su mensaje.";
     }
 
     @Tool(name = "submit_socioeconomic_info", description = "Completa los datos del análisis socioeconómico para el BLSG.")
@@ -350,7 +353,7 @@ public class DivorceMcpController {
                 observations);
 
         if (approved) {
-            return "Evaluación socioeconómica APROBADA. [NEXT_STEP] Pide SOLO los datos del matrimonio: fecha de matrimonio, fecha de separación y último domicilio conyugal. NO pidas actas ni datos de hijos todavía.";
+            return "Evaluación socioeconómica APROBADA. [NEXT_STEP] Verifica si el mensaje del usuario contiene un bloque [MEDIA]. Si NO contiene [MEDIA]: confirma los datos registrados y solicita el documento de ingresos (bono de sueldo si tiene empleo formal, certificado negativo de ANSES si no). PROHIBIDO avanzar a datos del matrimonio sin el documento. Si SÍ contiene [MEDIA]: llama a submit_digital_evidence con documentType='INCOME_PROOF'.";
         } else {
             return "Evaluación socioeconómica RECHAZADA. El ciudadano supera los límites establecidos por la Defensoría (Ingresos > 350.000 ARS o bienes significativos). Informar al ciudadano los motivos y finalizar la asistencia automática.";
         }
@@ -503,7 +506,7 @@ public class DivorceMcpController {
             
         UUID expedienteId = resolveExpedienteId(phoneNumber);
         draftRegulatoryAgreementUseCase.draftAlimony(expedienteId, proposalSummary);
-        return "El borrador de la propuesta de Convenio Regulador ha sido guardado exitosamente.";
+        return "El borrador de la propuesta de Convenio Regulador ha sido guardado exitosamente. [NEXT_STEP] El expediente está ahora COMPLETO. Informa al ciudadano de forma muy cálida que el trámite ha concluido esta primera etapa y pasa a revisión de un operador de la Defensoría. LUEGO PREGÚNTALE DIRECTAMENTE: '¿Querés que te envíe ahora un resumen del trámite en PDF?'.";
     }
 
     @Tool(name = "validate_agreement_legality", description = "Ejecuta validaciones legales preventivas sobre el expediente.")
@@ -674,7 +677,7 @@ public class DivorceMcpController {
                     nextStep = " [NEXT_STEP] Confirma recepción del acta de matrimonio. Luego pregunta: ¿tuvieron hijos en común? NO pidas otro documento todavía.";
                     break;
                 case "BIRTH_CERT":
-                    nextStep = " [NEXT_STEP] Confirma recepción del acta de nacimiento. Luego pregunta brevemente qué propone el usuario para el convenio regulador (cuidado personal, cuota alimentaria y bienes). Sé breve, NO redactes un documento legal.";
+                    nextStep = " [NEXT_STEP] Confirma MUY BREVEMENTE la recepción del acta de nacimiento (máximo 1 oración corta, ej: 'Acta de nacimiento recibida ✅'). Luego, EN UN BLOQUE SEPARADO con su propia cabecera '## 📝 CONVENIO REGULADOR', pregunta brevemente qué propone el usuario para el convenio regulador (cuidado personal, cuota alimentaria y bienes). IMPORTANTE: La cabecera del segundo bloque DEBE ser sobre el convenio regulador, NO sobre el acta de nacimiento.";
                     break;
                 case "DNI_FRONT":
                     nextStep = " [NEXT_STEP] Confirma recepción del frente del DNI. Pide ahora el dorso del DNI.";
@@ -683,7 +686,14 @@ public class DivorceMcpController {
                     nextStep = " [NEXT_STEP] Confirma recepción del dorso del DNI. Continúa con la siguiente fase pendiente del trámite.";
                     break;
                 case "INCOME_PROOF":
-                    nextStep = " [NEXT_STEP] Confirma recepción del certificado de ingresos. Pide SOLO los datos del matrimonio: fecha de matrimonio, fecha de separación y último domicilio conyugal. NO pidas actas ni datos de hijos todavía.";
+                    // Avanzar el stage del expediente al recibir el documento de ingresos
+                    Expediente incomeExp = expedienteDomainRepo.findById(expedienteId).orElse(null);
+                    if (incomeExp != null && incomeExp.getCollectionStage() == DataCollectionStageEnum.PENDING_INCOME_PROOF) {
+                        incomeExp.updateCollectionStage(DataCollectionStageEnum.PENDING_MARRIAGE_DETAILS);
+                        expedienteDomainRepo.save(incomeExp);
+                        log.info("Stage avanzado a PENDING_MARRIAGE_DETAILS tras recibir INCOME_PROOF para expediente {}", expedienteId);
+                    }
+                    nextStep = " [NEXT_STEP] Documento de ingresos recibido. Ahora pide SOLO los datos del matrimonio: fecha de matrimonio, fecha de separación y último domicilio conyugal. NO pidas actas ni datos de hijos todavía.";
                     break;
                 default:
                     nextStep = " [NEXT_STEP] Confirma recepción del documento. Continúa con la siguiente fase pendiente del trámite.";
@@ -862,5 +872,125 @@ public class DivorceMcpController {
         } else {
             return "Error: No se encontró ningún turno pre-reservado activo para este usuario.";
         }
+    }
+
+    // ==========================================
+    // TOOL-GATED STATE MACHINE (Stage Context)
+    // ==========================================
+
+    @Tool(name = "get_stage_context", description = "[INTERNAL] Consulta el contexto de fase del expediente para filtrado de herramientas. No la llames directamente.")
+    public String getStageContext(
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente.") String phoneNumber) {
+        try {
+            String normalized = normalizePhone(phoneNumber);
+            Optional<Expediente> optExp = expedienteDomainRepo.findActiveByClientPhone(normalized);
+
+            if (optExp.isEmpty()) {
+                return "{\"stage\":\"NO_EXPEDIENTE\",\"pendingDocuments\":[],\"allowedTools\":[\"consultar_blsg\",\"start_divorce_process\",\"get_datetime\",\"consultar_normativa\",\"get_stage_context\"]}";
+            }
+
+            Expediente exp = optExp.get();
+            DataCollectionStageEnum stage = exp.getCollectionStage();
+            UUID expedienteId = exp.getId();
+
+            // Consultar documentos cargados
+            List<DigitalEvidenceJpaEntity> evidences = digitalEvidenceRepository
+                .findByExpediente_IdOrderByCreatedAtDesc(expedienteId);
+
+            boolean hasIncomeProof = evidences.stream()
+                .anyMatch(e -> "INCOME_PROOF".equalsIgnoreCase(e.getDocumentType()));
+            boolean hasDniFront = evidences.stream()
+                .anyMatch(e -> "DNI_FRONT".equalsIgnoreCase(e.getDocumentType()));
+            boolean hasDniBack = evidences.stream()
+                .anyMatch(e -> "DNI_BACK".equalsIgnoreCase(e.getDocumentType()));
+            boolean hasMarriageCert = evidences.stream()
+                .anyMatch(e -> "MARRIAGE_CERT".equalsIgnoreCase(e.getDocumentType()));
+
+            // Documentos faltantes según la fase
+            List<String> pendingDocs = new java.util.ArrayList<>();
+            if (stage == DataCollectionStageEnum.PENDING_INCOME_PROOF && !hasIncomeProof) {
+                pendingDocs.add("INCOME_PROOF");
+            }
+
+            // Herramientas permitidas según la fase
+            List<String> allowedTools = getAllowedToolsForStage(stage, hasIncomeProof);
+
+            StringBuilder sb = new StringBuilder("{");
+            sb.append("\"stage\":\"").append(stage.name()).append("\",");
+            sb.append("\"hasIncomeProof\":").append(hasIncomeProof).append(",");
+            sb.append("\"hasDniFront\":").append(hasDniFront).append(",");
+            sb.append("\"hasDniBack\":").append(hasDniBack).append(",");
+            sb.append("\"hasMarriageCert\":").append(hasMarriageCert).append(",");
+            sb.append("\"pendingDocuments\":[").append(
+                pendingDocs.stream().map(d -> "\"" + d + "\"").collect(Collectors.joining(","))
+            ).append("],");
+            sb.append("\"allowedTools\":[").append(
+                allowedTools.stream().map(t -> "\"" + t + "\"").collect(Collectors.joining(","))
+            ).append("]}");
+
+            return sb.toString();
+        } catch (Exception e) {
+            log.error("Error en get_stage_context: {}", e.getMessage());
+            return "{\"stage\":\"ERROR\",\"pendingDocuments\":[],\"allowedTools\":[]}";
+        }
+    }
+
+    /**
+     * Determina qué herramientas del dominio están habilitadas para cada fase.
+     * Las herramientas utilitarias están SIEMPRE habilitadas.
+     */
+    private List<String> getAllowedToolsForStage(DataCollectionStageEnum stage, boolean hasIncomeProof) {
+        List<String> base = new java.util.ArrayList<>(List.of(
+            "get_datetime", "consultar_normativa", "get_pending_tasks",
+            "complete_observation_task", "get_dossier_stage", "get_stage_context",
+            "submit_digital_evidence", "send_local_file", "generate_pdf"
+        ));
+
+        switch (stage) {
+            case PENDING_BLSG_SCRAPING:
+                base.addAll(List.of("consultar_blsg", "start_divorce_process", "process_scraping_result"));
+                break;
+            case PENDING_MODALITY_SELECTION:
+                base.addAll(List.of("set_divorce_modality", "consultar_blsg_respondent"));
+                break;
+            case PENDING_RESPONDENT_BLSG:
+                base.add("consultar_blsg_respondent");
+                break;
+            case PENDING_PERSONAL_DATA:
+                base.addAll(List.of("submit_petitioner_personal_data", "submit_respondent_personal_data"));
+                break;
+            case PENDING_SOCIOECONOMIC_EVALUATION:
+                base.add("submit_socioeconomic_info");
+                break;
+            case PENDING_INCOME_PROOF:
+                // Solo submit_digital_evidence (ya en base). NO submit_marriage_details.
+                // Si ya tiene el documento, habilitar submit_marriage_details
+                if (hasIncomeProof) {
+                    base.add("submit_marriage_details");
+                }
+                break;
+            case PENDING_MARRIAGE_DETAILS:
+                base.add("submit_marriage_details");
+                break;
+            case PENDING_CHILDREN_INFO:
+                base.add("submit_children_info");
+                break;
+            case PENDING_REGULATORY_AGREEMENT:
+                base.addAll(List.of("draft_regulatory_agreement", "validate_agreement_legality",
+                    "generate_referral_summary_pdf", "get_available_appointment_slots",
+                    "check_appointment_availability", "book_signature_appointment",
+                    "confirm_appointment_commitment"));
+                break;
+            case COMPLETED:
+                base.addAll(List.of("generate_referral_summary_pdf", "validate_agreement_legality",
+                    "get_available_appointment_slots", "check_appointment_availability",
+                    "book_signature_appointment", "confirm_appointment_commitment"));
+                break;
+            case REJECTED:
+                // Solo utilitarias (ya en base)
+                break;
+        }
+
+        return base;
     }
 }

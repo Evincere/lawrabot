@@ -1,13 +1,15 @@
-import makeWASocket, {
+import pkg from "@whiskeysockets/baileys";
+const makeWASocket = (pkg as any).default || pkg;
+const {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   Browsers,
   downloadMediaMessage,
   getContentType,
-  type WASocket,
-  type proto,
-} from "@whiskeysockets/baileys";
+} = pkg as any;
+
+import type { WASocket, proto } from "@whiskeysockets/baileys";
 import pino from "pino";
 import qrcode from "qrcode-terminal";
 import * as fs from "fs";
@@ -40,16 +42,17 @@ export class WhatsAppAdapter implements ChannelAdapter {
     const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
     const { version } = await fetchLatestBaileysVersion();
 
-    this.socket = makeWASocket({
+    const sock = makeWASocket({
       auth: state,
       version,
       browser: Browsers.macOS("Desktop"),
       logger: pino({ level: "silent" }) as any,
     });
+    this.socket = sock;
 
-    this.socket.ev.on("creds.update", saveCreds);
+    sock.ev.on("creds.update", saveCreds);
 
-    this.socket.ev.on("connection.update", (update) => {
+    sock.ev.on("connection.update", (update: any) => {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
@@ -69,12 +72,12 @@ export class WhatsAppAdapter implements ChannelAdapter {
       }
     });
 
-    this.socket.ev.on("messages.upsert", async (m) => {
+    sock.ev.on("messages.upsert", async (m: any) => {
       for (const msg of m.messages) {
         if (!msg.message || msg.key.fromMe) continue;
 
         // Mark message as read (blue checks)
-        this.socket?.readMessages([msg.key]).catch((err) => {
+        sock.readMessages([msg.key]).catch((err: any) => {
           this.log.error(`Failed to mark message as read: ${err.message}`);
         });
 
@@ -121,9 +124,9 @@ export class WhatsAppAdapter implements ChannelAdapter {
 
       const m = msg.message!;
       const document = m.documentMessage || m.imageMessage || m.videoMessage || m.documentWithCaptionMessage?.message?.documentMessage;
-      const fileName = (document?.fileName) || 
+      const fileName = ((document as any)?.fileName) || 
                        (type === "imageMessage" ? `img_${Date.now()}.jpg` : (type === "videoMessage" ? `vid_${Date.now()}.mp4` : `doc_${Date.now()}.pdf`));
-      const mimeType = document?.mimetype || (type === "imageMessage" ? "image/jpeg" : (type === "videoMessage" ? "video/mp4" : "application/pdf"));
+      const mimeType = (document as any)?.mimetype || (type === "imageMessage" ? "image/jpeg" : (type === "videoMessage" ? "video/mp4" : "application/pdf"));
       
       const safeFileName = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
       const localPath = path.resolve(path.join(mediaDir, safeFileName));
@@ -170,8 +173,16 @@ export class WhatsAppAdapter implements ChannelAdapter {
 
   private formatForWhatsApp(text: string): string {
     return text
-      .replace(/\*\*/g, "*") // Convert Markdown bold to WhatsApp bold
-      .replace(/^#+\s+/gm, "") // Remove Markdown headers
+      // Convert Markdown bold to WhatsApp bold
+      .replace(/\*\*/g, "*")
+      // Convert level 1 headers to UPPERCASE bold
+      .replace(/^#\s+(.+)$/gm, (_, p1) => `*${p1.toUpperCase().trim()}*`)
+      // Convert level 2 headers to UPPERCASE bold
+      .replace(/^##\s+(.+)$/gm, (_, p1) => `*${p1.toUpperCase().trim()}*`)
+      // Convert level 3+ headers to bold (preserving case)
+      .replace(/^###+\s+(.+)$/gm, (_, p1) => `*${p1.trim()}*`)
+      // Clean up any redundant multiple asterisks
+      .replace(/\*\*+/g, "*")
       .trim();
   }
 

@@ -5,6 +5,7 @@ import type { HookRunner } from "../hooks/runner.js";
 import type { LLMProvider, LLMMessage } from "../llm/types.js";
 import type { InboundMessage, OutboundMessage, ChannelAdapter } from "../channels/types.js";
 import type { ToolContext } from "../tools/types.js";
+import { getFilteredTools, buildStageHint } from "./tool-gate.js";
 
 export interface MessageRouterDeps {
   sessionManager: SessionManager;
@@ -64,8 +65,7 @@ export function createMessageRouter(deps: MessageRouterDeps) {
         ...sessionManager.getContextMessages(session),
       ];
 
-      // Get tools for function calling
-      const tools = toolRegistry.toLLMTools();
+      // Build tool context
       const toolCtx: ToolContext = {
         sessionId: session.id,
         channelId,
@@ -73,6 +73,22 @@ export function createMessageRouter(deps: MessageRouterDeps) {
         senderId,
         config: {},
       };
+
+      // Get stage-aware filtered tools
+      const { tools, stageContext } = await getFilteredTools(
+        toolRegistry,
+        toolCtx,
+        phoneFromJid,
+        log,
+      );
+
+      // If we have stage context with an active expediente, inject a hint for the LLM
+      if (stageContext && stageContext.stage !== "NO_EXPEDIENTE" && stageContext.stage !== "ERROR") {
+        llmMessages.push({
+          role: "system" as const,
+          content: buildStageHint(stageContext),
+        });
+      }
 
       // Signal "typing" to the user
       await updatePresence(channelId, conversationId, "typing");

@@ -119,7 +119,7 @@ public class AdvancedRagService {
         // Implementación simplificada usando ts_rank sobre el contenido
         // En producción, esto usaría columnas indexadas GIN.
         String sql = """
-                    SELECT id, content, metadata, ts_rank(to_tsvector('spanish', content), plainto_tsquery('spanish', ?)) as rank
+                    SELECT id, content, metadata->>'parent_id' as parent_id, ts_rank(to_tsvector('spanish', content), plainto_tsquery('spanish', ?)) as rank
                     FROM vector_store
                     WHERE to_tsvector('spanish', content) @@ plainto_tsquery('spanish', ?)
                     ORDER BY rank DESC
@@ -130,10 +130,11 @@ public class AdvancedRagService {
             return jdbcTemplate.query(sql, (rs, rowNum) -> {
                 String id = rs.getString("id");
                 String content = rs.getString("content");
+                String parentId = rs.getString("parent_id");
                 return new Document(
                     java.util.Objects.requireNonNull(id != null ? id : java.util.UUID.randomUUID().toString()),
                     java.util.Objects.requireNonNull(content != null ? content : ""),
-                    java.util.Objects.requireNonNull(Map.of("parent_id", "SQL-Match"))
+                    java.util.Objects.requireNonNull(Map.of("parent_id", parentId != null ? parentId : "General"))
                 );
             }, query, query);
         } catch (Exception e) {

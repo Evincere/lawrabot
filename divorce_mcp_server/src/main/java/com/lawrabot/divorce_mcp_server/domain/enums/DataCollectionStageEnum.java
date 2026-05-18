@@ -10,6 +10,7 @@ public enum DataCollectionStageEnum {
     PENDING_RESPONDENT_BLSG,           // (Solo conjunto) BLSG del 2do cónyuge
     PENDING_PERSONAL_DATA,             // Datos personales de las partes
     PENDING_SOCIOECONOMIC_EVALUATION,  // Perfil económico (criterios Defensoría)
+    PENDING_INCOME_PROOF,              // Esperando documento de ingresos (bono sueldo / cert. negativo ANSES)
     PENDING_MARRIAGE_DETAILS,          // Matrimonio y último domicilio conyugal
     PENDING_CHILDREN_INFO,             // Hijos menores o vulnerables
     PENDING_REGULATORY_AGREEMENT,      // Convenio regulador

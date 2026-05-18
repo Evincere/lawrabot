@@ -178,7 +178,7 @@ public class Expediente {
             if (this.collectionStage == DataCollectionStageEnum.PENDING_SOCIOECONOMIC_EVALUATION) {
                 this.collectionStage = (this.marriageDate != null) 
                     ? DataCollectionStageEnum.COMPLETED 
-                    : DataCollectionStageEnum.PENDING_MARRIAGE_DETAILS;
+                    : DataCollectionStageEnum.PENDING_INCOME_PROOF;
             }
         } else {
             this.status = ExpedienteStatusEnum.BLSG_RECHAZADO;

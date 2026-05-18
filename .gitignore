@@ -47,3 +47,10 @@ bin/
 
 # Docker
 .docker_temp/
+
+# LawraBot Dynamic Data & Scratch Files
+divorce_mcp_server/storage/
+agent/.data/
+tmp/
+cleanup_session.sh
+

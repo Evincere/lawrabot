@@ -44,5 +44,11 @@
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",
     "vitest": "^3.1.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "protobufjs"
+    ]
   }
 }
