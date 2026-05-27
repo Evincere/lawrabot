@@ -13,5 +13,8 @@ public record ChildDto(
     String birthDate,
     
     @JsonPropertyDescription("CAMPO 'disabled': true si el hijo tiene certificado de discapacidad, false en caso contrario.")
-    boolean disabled
+    boolean disabled,
+
+    @JsonPropertyDescription("CAMPO 'isStudent': true si el hijo de 21 a 24 años se encuentra estudiando o capacitándose, false o null en caso contrario.")
+    Boolean isStudent
 ) {}

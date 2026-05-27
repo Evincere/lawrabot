@@ -71,6 +71,7 @@ public class UpdateCaseDataRequest {
         private String dni;
         private String birthDate;
         private Boolean hasDisability;
+        private Boolean isStudent;
         private String birthCertificateId;
     }
 

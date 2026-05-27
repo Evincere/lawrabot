@@ -42,6 +42,8 @@ import java.util.stream.Collectors;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @Component
 @Slf4j
@@ -280,27 +282,209 @@ public class DivorceMcpController {
     @Tool(name = "submit_children_info", description = "Carga la información de los hijos al expediente.")
     public String submitChildrenInfo(
             @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
-            @JsonPropertyDescription("Lista de hijos. Cada elemento debe tener: fullName (String), birthDate (String YYYY-MM-DD), dni (String, opcional), disabled (boolean).") List<ChildDto> children) {
+            @JsonPropertyDescription("Lista de hijos en formato texto simple. Cada elemento DEBE tener el formato exacto: 'nombre_completo | YYYY-MM-DD | DNI_o_null | disabled=true/false | isStudent=true/false/null'. Ej: ['Aleixo Toledo | 2009-09-20 | 51711299 | disabled=false | isStudent=null']. Si no hay hijos, enviá [].") List<String> childrenCsv) {
             
-        UUID expedienteId = resolveExpedienteId(phoneNumber);
-        if (children == null || children.isEmpty()) {
-            return "Error: La lista de hijos está vacía. Debes incluir al menos un hijo con su nombre completo (fullName), fecha de nacimiento (birthDate) y DNI (dni).";
+        List<ChildDto> children = new java.util.ArrayList<>();
+        if (childrenCsv != null) {
+            for (String csv : childrenCsv) {
+                try {
+                    String[] parts = csv.split("\\|");
+                    if (parts.length >= 5) {
+                        String name = parts[0].trim();
+                        String bdate = parts[1].trim();
+                        String dni = parts[2].trim().replace("null", "");
+                        boolean disabled = parts[3].trim().toLowerCase().contains("true");
+                        Boolean isStudent = null;
+                        String studentStr = parts[4].trim().toLowerCase();
+                        if (studentStr.contains("true")) isStudent = true;
+                        if (studentStr.contains("false")) isStudent = false;
+                        
+                        children.add(new ChildDto(dni.isEmpty() ? null : dni, name, bdate, disabled, isStudent));
+                    }
+                } catch (Exception e) {
+                    log.error("Error parsing childrenCsv element: {}", csv);
+                }
+            }
         }
-        List<Child> domainChildren = children.stream().map(dto -> {
+
+        UUID expedienteId = resolveExpedienteId(phoneNumber);
+        if (children.isEmpty()) {
+            Expediente exp = expedienteDomainRepo.findById(expedienteId)
+                    .orElseThrow(() -> new IllegalArgumentException("Expediente no encontrado."));
+            exp.setChildren(List.of());
+            exp.updateCollectionStage(DataCollectionStageEnum.PENDING_REGULATORY_AGREEMENT);
+            expedienteDomainRepo.save(exp);
+            return "Datos registrados. No se informaron hijos en común. [NEXT_STEP] El caso no posee hijos elegibles. Avanzado automáticamente al Convenio Regulador. EN UN BLOQUE SEPARADO con su propia cabecera '## 📝 CONVENIO REGULADOR', pregunta qué propone para el convenio regulador (distribución de bienes, uso de vivienda, etc.).";
+        }
+
+        LocalDate now = LocalDate.now();
+        List<Child> eligibleChildren = new java.util.ArrayList<>();
+        List<String> questionsToAsk = new java.util.ArrayList<>();
+        List<String> exclusionsInfo = new java.util.ArrayList<>();
+
+        for (ChildDto dto : children) {
             FullNameVO name = FullNameVO.fromFullString(dto.fullName());
             DNIVO dniVO = (dto.dni() != null && !dto.dni().isBlank()) ? DNIVO.of(dto.dni()) : null;
             LocalDate bDate = (dto.birthDate() != null && !dto.birthDate().isBlank()) ? LocalDate.parse(dto.birthDate())
                     : null;
-            return Child.builder()
-                    .name(name)
-                    .dni(dniVO)
-                    .birthDate(bDate)
-                    .disabled(dto.disabled())
-                    .build();
-        }).collect(Collectors.toList());
 
-        submitChildrenInfoUseCase.execute(expedienteId, domainChildren);
-        return "Datos del/los hijo(s) registrados correctamente (" + domainChildren.size() + " hijo(s)). [NEXT_STEP] PREGUNTA al usuario que envíe el Acta de Nacimiento de cada hijo menor (foto o PDF) por este chat. Una vez recibidas, pregunta brevemente qué propone para el convenio regulador (cuidado personal de los hijos, alimentos y atribución de vivienda/bienes). PROHIBIDO llamar a submit_digital_evidence ahora — solo podés llamarla cuando el usuario ENVÍE el archivo y veas [MEDIA] en su mensaje.";
+            if (bDate == null) {
+                // Si no tiene fecha de nacimiento, asumir menor para estar del lado de la seguridad
+                eligibleChildren.add(Child.builder()
+                        .name(name)
+                        .dni(dniVO)
+                        .birthDate(null)
+                        .disabled(dto.disabled())
+                        .student(dto.isStudent() != null && dto.isStudent())
+                        .build());
+                continue;
+            }
+
+            int age = java.time.Period.between(bDate, now).getYears();
+
+            if (age < 18) {
+                // Menor de 18: Elegible ordinario
+                eligibleChildren.add(Child.builder()
+                        .name(name)
+                        .dni(dniVO)
+                        .birthDate(bDate)
+                        .disabled(dto.disabled())
+                        .student(false)
+                        .build());
+            } else if (age < 21) {
+                // Entre 18 y 20 años: Elegible ordinario
+                eligibleChildren.add(Child.builder()
+                        .name(name)
+                        .dni(dniVO)
+                        .birthDate(bDate)
+                        .disabled(dto.disabled())
+                        .student(false)
+                        .build());
+            } else if (age < 25) {
+                // Entre 21 y 24 años: Depende de estudios o discapacidad
+                if (dto.disabled()) {
+                    eligibleChildren.add(Child.builder()
+                            .name(name)
+                            .dni(dniVO)
+                            .birthDate(bDate)
+                            .disabled(true)
+                            .student(dto.isStudent() != null && dto.isStudent())
+                            .build());
+                } else if (dto.isStudent() == null) {
+                    // Si no sabemos si estudia, preguntamos proactivamente
+                    questionsToAsk.add("Noté que " + name.getFirstName() + " tiene " + age + " años. ¿Actualmente se encuentra estudiando o capacitándose en un oficio que le impida trabajar a tiempo completo?");
+                    // Mantenemos al hijo temporalmente para no perder datos en la recolección
+                    eligibleChildren.add(Child.builder()
+                            .name(name)
+                            .dni(dniVO)
+                            .birthDate(bDate)
+                            .disabled(false)
+                            .student(false)
+                            .build());
+                } else if (dto.isStudent()) {
+                    // Estudiante: Elegible
+                    eligibleChildren.add(Child.builder()
+                            .name(name)
+                            .dni(dniVO)
+                            .birthDate(bDate)
+                            .disabled(false)
+                            .student(true)
+                            .build());
+                } else {
+                    // No estudia y no es discapacitado: Excluido (Fail Fast)
+                    exclusionsInfo.add(name.getFirstName() + " (" + age + " años, no estudia)");
+                }
+            } else {
+                // Mayor de 25 años: Solo si tiene discapacidad
+                if (dto.disabled()) {
+                    eligibleChildren.add(Child.builder()
+                            .name(name)
+                            .dni(dniVO)
+                            .birthDate(bDate)
+                            .disabled(true)
+                            .student(false)
+                            .build());
+                } else {
+                    exclusionsInfo.add(name.getFirstName() + " (" + age + " años, sin discapacidad declarada)");
+                }
+            }
+        }
+
+        // Guardar los hijos elegibles/en proceso
+        submitChildrenInfoUseCase.execute(expedienteId, eligibleChildren);
+
+        StringBuilder nextStep = new StringBuilder("Datos de los hijos procesados. ");
+        if (!exclusionsInfo.isEmpty()) {
+            nextStep.append("Los siguientes hijos mayores de edad fueron excluidos del convenio por no cumplir con los requisitos excepcionales de la ley (Art. 658, 663 CCyC): ")
+                    .append(String.join(", ", exclusionsInfo)).append(". ");
+        }
+
+        if (!questionsToAsk.isEmpty()) {
+            nextStep.append("[NEXT_STEP] ").append(String.join(" ", questionsToAsk));
+            return nextStep.toString();
+        }
+
+        // Si no hay preguntas pendientes, pedir los documentos
+        List<String> checklist = new java.util.ArrayList<>();
+        checklist.add("Acta de nacimiento para cada hijo registrado (acredita el vínculo)");
+        
+        for (Child c : eligibleChildren) {
+            if (c.isDisabled()) {
+                checklist.add("Certificado Único de Discapacidad (CUD) para " + c.getFullName());
+            }
+            // Nota: El Certificado de Alumno Regular NO se solicita al ciudadano.
+            // Será gestionado por el abogado defensor en una etapa posterior del proceso.
+        }
+
+        nextStep.append("[NEXT_STEP] Por favor, realizá la pregunta de barrido: '¿Alguno de los hijos tiene alguna discapacidad o requiere apoyo asistencial permanente?'. ");
+        nextStep.append("Luego, solicitá proactivamente la siguiente documentación probatoria (foto o PDF legible):\n");
+        for (String item : checklist) {
+            nextStep.append("- ").append(item).append("\n");
+        }
+        nextStep.append("\nPROHIBIDO avanzar al convenio regulador hasta que todos los documentos pendientes hayan sido adjuntados digitalmente (submit_digital_evidence).");
+
+        return nextStep.toString();
+    }
+
+    private void checkAndAdvanceChildrenStage(Expediente exp) {
+        if (exp.getCollectionStage() != DataCollectionStageEnum.PENDING_CHILDREN_INFO) {
+            return;
+        }
+
+        List<Child> childrenList = exp.getChildren();
+        if (childrenList == null || childrenList.isEmpty()) {
+            exp.updateCollectionStage(DataCollectionStageEnum.PENDING_REGULATORY_AGREEMENT);
+            expedienteDomainRepo.save(exp);
+            log.info("Expediente {} avanzado automáticamente a PENDING_REGULATORY_AGREEMENT por no tener hijos", exp.getId());
+            return;
+        }
+
+        // Obtener evidencias subidas
+        List<DigitalEvidenceJpaEntity> evidences = digitalEvidenceRepository.findByExpediente_IdOrderByCreatedAtDesc(exp.getId());
+        
+        long birthCertCount = evidences.stream().filter(e -> "BIRTH_CERT".equalsIgnoreCase(e.getDocumentType())).count();
+        long disabilityCertCount = evidences.stream().filter(e -> "DISABILITY_CERT".equalsIgnoreCase(e.getDocumentType())).count();
+
+        // Calcular cuántos de cada tipo requerimos
+        int birthCertsRequired = childrenList.size(); // 1 para cada hijo elegible
+        int disabilityCertsRequired = 0;
+        // Nota: STUDENT_PROOF no se requiere al ciudadano; lo gestiona el abogado defensor.
+
+        for (Child c : childrenList) {
+            if (c.isDisabled()) {
+                disabilityCertsRequired++;
+            }
+        }
+
+        boolean hasAllBirthCerts = birthCertCount >= birthCertsRequired;
+        boolean hasAllDisabilityCerts = disabilityCertCount >= disabilityCertsRequired;
+
+        if (hasAllBirthCerts && hasAllDisabilityCerts) {
+            exp.updateCollectionStage(DataCollectionStageEnum.PENDING_REGULATORY_AGREEMENT);
+            expedienteDomainRepo.save(exp);
+            log.info("Expediente {} avanzado automáticamente a PENDING_REGULATORY_AGREEMENT. Documentos de hijos cargados: {} actas nac., {} CUD.", 
+                    exp.getId(), birthCertCount, disabilityCertCount);
+        }
     }
 
     @Tool(name = "submit_socioeconomic_info", description = "Completa los datos del análisis socioeconómico para el BLSG.")
@@ -600,6 +784,7 @@ public class DivorceMcpController {
             @JsonPropertyDescription("MANDATORIO EXACTO: Usa estrictamente uno de: 'DNI_FRONT', 'DNI_BACK', 'MARRIAGE_CERT', 'BIRTH_CERT', 'INCOME_PROOF' (bono de sueldo o certificado negativo ANSES), 'DISABILITY_CERT' (CUD), 'OTHER'. ¡NO uses descripciones en español!") String documentType,
             @JsonPropertyDescription("Ruta local absoluta del archivo descargado por el agente") String localFilePath,
             @JsonPropertyDescription("Nombre sugerido para el archivo") String fileName,
+            @JsonPropertyDescription("Opcional: Nombre completo del hijo al que corresponde el documento (si aplica). Inferilo del mensaje del usuario, ej: 'esta es el acta de Micaela' → 'Micaela Toledo Pereyra'. Si no se puede determinar, dejá null.") @org.springframework.lang.Nullable String childFullName,
             @JsonPropertyDescription("Opcional: ID de la tarea de observación asociada") @org.springframework.lang.Nullable UUID taskId) {
         try {
             UUID expedienteId = resolveExpedienteId(phoneNumber);
@@ -630,6 +815,17 @@ public class DivorceMcpController {
             // Purgar duplicados: buscar todas las evidencias NO aprobadas de este tipo para este expediente
             List<DigitalEvidenceJpaEntity> others = digitalEvidenceRepository.findByExpediente_IdOrderByCreatedAtDesc(expedienteId).stream()
                 .filter(ev -> ev.getDocumentType().equalsIgnoreCase(documentType) && !ev.isApproved())
+                .filter(ev -> {
+                    // Si es un documento asociado a un hijo, solo purgar si corresponde al mismo hijo
+                    if ("BIRTH_CERT".equalsIgnoreCase(documentType) || "DISABILITY_CERT".equalsIgnoreCase(documentType) || "STUDENT_PROOF".equalsIgnoreCase(documentType)) {
+                        if (childFullName == null) {
+                            return ev.getChildFullName() == null;
+                        }
+                        return childFullName.equalsIgnoreCase(ev.getChildFullName());
+                    }
+                    // Para otros documentos generales (matrimonio, ingresos), se purgan siempre
+                    return true;
+                })
                 .collect(Collectors.toList());
             
             DigitalEvidenceJpaEntity evidence;
@@ -654,6 +850,7 @@ public class DivorceMcpController {
             evidence.setFilePath(targetPath.toAbsolutePath().toString());
             evidence.setMimeType(mimeType != null ? mimeType : "application/octet-stream");
             evidence.setApproved(false);
+            evidence.setChildFullName(childFullName);
             evidence.setCreatedAt(LocalDateTime.now());
 
             digitalEvidenceRepository.save(evidence);
@@ -674,10 +871,55 @@ public class DivorceMcpController {
             String nextStep;
             switch (documentType.toUpperCase()) {
                 case "MARRIAGE_CERT":
+                    Expediente marriageExp = expedienteDomainRepo.findById(expedienteId).orElse(null);
+                    if (marriageExp != null && marriageExp.getCollectionStage() == DataCollectionStageEnum.PENDING_MARRIAGE_DETAILS) {
+                        marriageExp.updateCollectionStage(DataCollectionStageEnum.PENDING_CHILDREN_INFO);
+                        expedienteDomainRepo.save(marriageExp);
+                        log.info("Stage avanzado a PENDING_CHILDREN_INFO tras recibir MARRIAGE_CERT para expediente {}", expedienteId);
+                    }
                     nextStep = " [NEXT_STEP] Confirma recepción del acta de matrimonio. Luego pregunta: ¿tuvieron hijos en común? NO pidas otro documento todavía.";
                     break;
                 case "BIRTH_CERT":
-                    nextStep = " [NEXT_STEP] Confirma MUY BREVEMENTE la recepción del acta de nacimiento (máximo 1 oración corta, ej: 'Acta de nacimiento recibida ✅'). Luego, EN UN BLOQUE SEPARADO con su propia cabecera '## 📝 CONVENIO REGULADOR', pregunta brevemente qué propone el usuario para el convenio regulador (cuidado personal, cuota alimentaria y bienes). IMPORTANTE: La cabecera del segundo bloque DEBE ser sobre el convenio regulador, NO sobre el acta de nacimiento.";
+                    Expediente birthExp = expedienteDomainRepo.findById(expedienteId).orElse(null);
+                    if (birthExp != null) {
+                        checkAndAdvanceChildrenStage(birthExp);
+                        birthExp = expedienteDomainRepo.findById(expedienteId).orElse(birthExp);
+                        if (birthExp.getCollectionStage() == DataCollectionStageEnum.PENDING_REGULATORY_AGREEMENT) {
+                            nextStep = " [NEXT_STEP] Confirma MUY BREVEMENTE la recepción del acta de nacimiento (máximo 1 oración corta, ej: 'Acta de nacimiento recibida ✅'). Todos los documentos cargados correctamente. Avanzado a Convenio Regulador. EN UN BLOQUE SEPARADO con su propia cabecera '## 📝 CONVENIO REGULADOR', pregunta qué propone para el convenio regulador (cuidado personal, cuota alimentaria y bienes).";
+                        } else {
+                            nextStep = " [NEXT_STEP] Confirma MUY BREVEMENTE la recepción del acta de nacimiento (máximo 1 oración corta, ej: 'Acta de nacimiento recibida ✅'). Solicita cualquier acta de nacimiento, Certificado CUD o alumno regular restante.";
+                        }
+                    } else {
+                        nextStep = " [NEXT_STEP] Acta de nacimiento recibida. Continúa con el flujo.";
+                    }
+                    break;
+                case "DISABILITY_CERT":
+                    Expediente disExp = expedienteDomainRepo.findById(expedienteId).orElse(null);
+                    if (disExp != null) {
+                        checkAndAdvanceChildrenStage(disExp);
+                        disExp = expedienteDomainRepo.findById(expedienteId).orElse(disExp);
+                        if (disExp.getCollectionStage() == DataCollectionStageEnum.PENDING_REGULATORY_AGREEMENT) {
+                            nextStep = " [NEXT_STEP] Certificado de discapacidad (CUD) recibido. Todos los documentos cargados correctamente. Avanzado a Convenio Regulador. EN UN BLOQUE SEPARADO con su propia cabecera '## 📝 CONVENIO REGULADOR', pregunta qué propone para el convenio regulador (cuidado personal, cuota alimentaria y bienes).";
+                        } else {
+                            nextStep = " [NEXT_STEP] Certificado de discapacidad (CUD) recibido. Solicita cualquier acta de nacimiento o certificado regular de estudios faltante.";
+                        }
+                    } else {
+                        nextStep = " [NEXT_STEP] Certificado de discapacidad (CUD) recibido.";
+                    }
+                    break;
+                case "STUDENT_PROOF":
+                    Expediente studExp = expedienteDomainRepo.findById(expedienteId).orElse(null);
+                    if (studExp != null) {
+                        checkAndAdvanceChildrenStage(studExp);
+                        studExp = expedienteDomainRepo.findById(expedienteId).orElse(studExp);
+                        if (studExp.getCollectionStage() == DataCollectionStageEnum.PENDING_REGULATORY_AGREEMENT) {
+                            nextStep = " [NEXT_STEP] Certificado de alumno regular recibido. Todos los documentos cargados correctamente. Avanzado a Convenio Regulador. EN UN BLOQUE SEPARADO con su propia cabecera '## 📝 CONVENIO REGULADOR', pregunta qué propone para el convenio regulador (cuidado personal, cuota alimentaria y bienes).";
+                        } else {
+                            nextStep = " [NEXT_STEP] Certificado de alumno regular recibido. Solicita cualquier acta de nacimiento o certificado CUD faltante.";
+                        }
+                    } else {
+                        nextStep = " [NEXT_STEP] Certificado de alumno regular recibido.";
+                    }
                     break;
                 case "DNI_FRONT":
                     nextStep = " [NEXT_STEP] Confirma recepción del frente del DNI. Pide ahora el dorso del DNI.";
@@ -711,40 +953,42 @@ public class DivorceMcpController {
     }
 
     @Tool(name = "consultar_normativa", description = "Consulta la base de conocimientos legal (CCyC) para responder dudas de derecho de familia.")
-    public String consultarNormativa(
+    public Mono<String> consultarNormativa(
             @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
             @JsonPropertyDescription("La duda legal del usuario (coloquial o técnica)") String query) {
             
         log.info("Tool MCP: consultar_normativa - Query: {}", query);
         
-        Optional<ExpedienteJpaEntity> expedienteOpt = expedienteRepository.findFirstByPhone(phoneNumber);
-        String caseMemory = expedienteOpt.map(this::summarizeCase).orElse("Contexto general.");
-        
-        if (ragService == null) {
-            return "El motor de búsqueda legal no está disponible en este entorno.";
-        }
+        return Mono.fromCallable(() -> {
+            Optional<ExpedienteJpaEntity> expedienteOpt = expedienteRepository.findFirstByPhone(phoneNumber);
+            return expedienteOpt.map(this::summarizeCase).orElse("Contexto general.");
+        }).subscribeOn(Schedulers.boundedElastic()).flatMap(caseMemory -> {
+            if (ragService == null) {
+                return Mono.just("El motor de búsqueda legal no está disponible en este entorno.");
+            }
 
-        List<Document> legalArticles = ragService.searchLegalKnowledge(query);
-        
-        if (legalArticles.isEmpty()) {
-            return "IMPORTANTE: No se han encontrado artículos pertinentes en la base de datos oficial para esta duda específica. Se recomienda consultar con un profesional del MPD.";
-        }
-        
-        StringBuilder output = new StringBuilder();
-        output.append("📖 *BASE LEGAL ASOCIADA (Código Civil y Comercial)*\n\n");
-        
-        for (Document doc : legalArticles) {
-            output.append("*Artículo ").append(doc.getMetadata().get("article_id")).append("*\n");
-            output.append("> ").append(doc.getText()).append("\n\n");
-        }
-        
-        output.append("💡 *ORIENTACIÓN SEGÚN TU CASO*\n");
-        output.append("Basado en tu situación: ").append(caseMemory).append("\n\n");
-        
-        output.append("---\n");
-        output.append("⚠️ *ADVERTENCIA*: Esta información es generada por una IA con fines orientativos y no sustituye el asesoramiento legal de un abogado defensor.");
-        
-        return output.toString();
+            return ragService.searchLegalKnowledge(query).map(legalArticles -> {
+                if (legalArticles.isEmpty()) {
+                    return "IMPORTANTE: No se han encontrado artículos pertinentes en la base de datos oficial para esta duda específica. Se recomienda consultar con un profesional del MPD.";
+                }
+                
+                StringBuilder output = new StringBuilder();
+                output.append("📖 *BASE LEGAL ASOCIADA (Código Civil y Comercial)*\n\n");
+                
+                for (Document doc : legalArticles) {
+                    output.append("*Artículo ").append(doc.getMetadata().get("article_id")).append("*\n");
+                    output.append("> ").append(doc.getText()).append("\n\n");
+                }
+                
+                output.append("💡 *ORIENTACIÓN SEGÚN TU CASO*\n");
+                output.append("Basado en tu situación: ").append(caseMemory).append("\n\n");
+                
+                output.append("---\n");
+                output.append("⚠️ *ADVERTENCIA*: Esta información es generada por una IA con fines orientativos y no sustituye el asesoramiento legal de un abogado defensor.");
+                
+                return output.toString();
+            });
+        });
     }
 
     private String summarizeCase(ExpedienteJpaEntity e) {

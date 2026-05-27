@@ -170,6 +170,7 @@ public class DivorceRestController {
                 .dni(dni != null && !dni.isBlank() && !"S/D".equals(dni) ? DNIVO.of(dni) : null)
                 .birthDate(parseDate(dto.getBirthDate()))
                 .disabled(dto.getHasDisability() != null && dto.getHasDisability())
+                .student(dto.getIsStudent() != null && dto.getIsStudent())
                 .birthCertificateId(dto.getBirthCertificateId())
                 .build();
     }
@@ -483,6 +484,7 @@ public class DivorceRestController {
                     .birthDate(cBirth != null ? cBirth.toString() : "S/D")
                     .age(c.getAge())
                     .hasDisability(c.isDisabled())
+                    .isStudent(c.isStudent())
                     .birthCertificateId(c.getBirthCertificateId())
                     .build();
             }).collect(Collectors.toList());

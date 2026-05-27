@@ -29,16 +29,20 @@ public class Child {
     @Builder.Default
     private boolean disabled = false;   
 
+    @Builder.Default
+    private boolean student = false;
+
     @Nullable
     private final String birthCertificateId;
 
-    public static Child create(FullNameVO name, LocalDate birthDate, @Nullable DNIVO dni, boolean disabled, @Nullable String birthCertificateId) {
+    public static Child create(FullNameVO name, LocalDate birthDate, @Nullable DNIVO dni, boolean disabled, boolean student, @Nullable String birthCertificateId) {
         return Child.builder()
                 .id(UUID.randomUUID())
                 .name(name)
                 .birthDate(birthDate)
                 .dni(dni)
                 .disabled(disabled)
+                .student(student)
                 .birthCertificateId(birthCertificateId)
                 .build();
     }

@@ -17,7 +17,7 @@
       "2b476d3445b94048bb56f4413ab4e7eb.1yj6ugIpMbIlSKWs40F5byFA",
     ],
     temperature: 0.1,
-    maxTokens: 500,
+    maxTokens: 800,
   },
   sessions: {
     persistDir: ".data/sessions-divorce",

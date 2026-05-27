@@ -31,6 +31,7 @@ public class ChildMapper {
                 .birthDate(domain.getBirthDate())
                 .dni(dniValue)
                 .disabled(domain.isDisabled())
+                .student(domain.isStudent())
                 .build();
     }
 
@@ -49,6 +50,7 @@ public class ChildMapper {
                 .birthDate(entity.getBirthDate())
                 .dni(dni)
                 .disabled(entity.isDisabled())
+                .student(entity.isStudent())
                 .build();
     }
 }

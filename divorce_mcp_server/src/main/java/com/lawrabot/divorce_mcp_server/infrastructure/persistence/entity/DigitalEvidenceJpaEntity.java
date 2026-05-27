@@ -50,6 +50,9 @@ public class DigitalEvidenceJpaEntity {
     @Column(name = "rejection_reason")
     private String rejectionReason;
 
+    @Column(name = "child_full_name")
+    private String childFullName;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 }

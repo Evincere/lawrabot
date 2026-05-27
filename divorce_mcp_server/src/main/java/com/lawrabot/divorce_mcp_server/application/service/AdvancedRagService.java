@@ -13,6 +13,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Servicio de búsqueda legal avanzada.
@@ -38,39 +40,41 @@ public class AdvancedRagService {
      * Fusion.
      * Pilares 1 & 2 del diseño avanzado.
      */
-    public List<Document> searchLegalKnowledge(String userQuery) {
-        log.info("Iniciando búsqueda híbrida avanzada: {}", userQuery);
-        long totalStart = System.currentTimeMillis();
+    public Mono<List<Document>> searchLegalKnowledge(String userQuery) {
+        return Mono.fromCallable(() -> {
+            log.info("Iniciando búsqueda híbrida avanzada: {}", userQuery);
+            long totalStart = System.currentTimeMillis();
 
-        // 1. HyDE
-        long hydeStart = System.currentTimeMillis();
-        String hypotheticalDoc = generateHydeDocument(userQuery);
-        log.info("Fase HyDE completada en {}ms", System.currentTimeMillis() - hydeStart);
+            // 1. HyDE
+            long hydeStart = System.currentTimeMillis();
+            String hypotheticalDoc = generateHydeDocument(userQuery);
+            log.info("Fase HyDE completada en {}ms", System.currentTimeMillis() - hydeStart);
 
-        // 2. Rama 1: Búsqueda Semántica (Dense)
-        long denseStart = System.currentTimeMillis();
-        SearchRequest searchRequest = SearchRequest.builder()
-                .query(java.util.Objects.requireNonNull(hypotheticalDoc != null ? hypotheticalDoc : userQuery))
-                .topK(20)
-                .similarityThreshold(0.60)
-                .build();
-        List<Document> denseResults = vectorStore.similaritySearch(searchRequest);
-        log.info("Fase Búsqueda Semántica (Dense) completada en {}ms", System.currentTimeMillis() - denseStart);
+            // 2. Rama 1: Búsqueda Semántica (Dense)
+            long denseStart = System.currentTimeMillis();
+            SearchRequest searchRequest = SearchRequest.builder()
+                    .query(java.util.Objects.requireNonNull(hypotheticalDoc != null ? hypotheticalDoc : userQuery))
+                    .topK(20)
+                    .similarityThreshold(0.60)
+                    .build();
+            List<Document> denseResults = vectorStore.similaritySearch(searchRequest);
+            log.info("Fase Búsqueda Semántica (Dense) completada en {}ms", System.currentTimeMillis() - denseStart);
 
-        // 3. Rama 2: Búsqueda Léxica (Lexical/BM25 similar) vía SQL
-        long lexicalStart = System.currentTimeMillis();
-        List<Document> lexicalResults = searchLexical(userQuery);
-        log.info("Fase Búsqueda Léxica (SQL) completada en {}ms", System.currentTimeMillis() - lexicalStart);
+            // 3. Rama 2: Búsqueda Léxica (Lexical/BM25 similar) vía SQL
+            long lexicalStart = System.currentTimeMillis();
+            List<Document> lexicalResults = searchLexical(userQuery);
+            log.info("Fase Búsqueda Léxica (SQL) completada en {}ms", System.currentTimeMillis() - lexicalStart);
 
-        // 4. Pilar 2: Fusión de Rankings (RRF)
-        List<Document> fusedResults = reciprocalRankFusion(denseResults, lexicalResults);
+            // 4. Pilar 2: Fusión de Rankings (RRF)
+            List<Document> fusedResults = reciprocalRankFusion(denseResults, lexicalResults);
 
-        // 5. Pilar 3: Expansión a Contexto Padre (Parent-Child Retrieval)
-        List<Document> expandedResults = expandToParentContext(fusedResults);
+            // 5. Pilar 3: Expansión a Contexto Padre (Parent-Child Retrieval)
+            List<Document> expandedResults = expandToParentContext(fusedResults);
 
-        log.info("Búsqueda finalizada en {}ms. {} artículos consolidados.", 
-                System.currentTimeMillis() - totalStart, expandedResults.size());
-        return expandedResults;
+            log.info("Búsqueda finalizada en {}ms. {} artículos consolidados.", 
+                    System.currentTimeMillis() - totalStart, expandedResults.size());
+            return expandedResults;
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     /**

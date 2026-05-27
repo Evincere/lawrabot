@@ -74,7 +74,12 @@ export class WhatsAppAdapter implements ChannelAdapter {
 
     sock.ev.on("messages.upsert", async (m: any) => {
       for (const msg of m.messages) {
-        if (!msg.message || msg.key.fromMe) continue;
+        this.log.info(`[whatsapp] raw message: ${JSON.stringify({ key: msg.key, message: msg.message })}`);
+        
+        if (!msg.message || msg.key.fromMe) {
+          this.log.debug(`[whatsapp] Skipping message: no message body or fromMe=true`);
+          continue;
+        }
 
         // Mark message as read (blue checks)
         sock.readMessages([msg.key]).catch((err: any) => {
@@ -84,8 +89,13 @@ export class WhatsAppAdapter implements ChannelAdapter {
         const text = this.extractText(msg);
         const mediaInfo = await this.processMediaIfPresent(msg);
         
+        this.log.info(`[whatsapp] extracted text: "${text}", media: ${!!mediaInfo}`);
+
         // Skip if there's no text AND no media
-        if (!text && !mediaInfo) continue;
+        if (!text && !mediaInfo) {
+          this.log.warn(`[whatsapp] Skipping message: text and mediaInfo are null`);
+          continue;
+        }
 
         // Construct final message text with metadata if media exists
         let finalText = text ?? "";
@@ -96,6 +106,8 @@ export class WhatsAppAdapter implements ChannelAdapter {
         const conversationId = msg.key.remoteJid ?? "unknown";
         const senderId = msg.key.participant ?? msg.key.remoteJid ?? "unknown";
 
+        this.log.info(`[whatsapp] Routing message from ${senderId} to conversation ${conversationId}`);
+        
         this.handler?.({
           channelId: this.id,
           conversationId,
@@ -110,7 +122,12 @@ export class WhatsAppAdapter implements ChannelAdapter {
   }
 
   private async processMediaIfPresent(msg: proto.IWebMessageInfo): Promise<{ localPath: string; fileName: string; mimeType: string } | null> {
-    const type = getContentType(msg.message!);
+    let m = msg.message!;
+    if (m.ephemeralMessage?.message) m = m.ephemeralMessage.message;
+    if (m.viewOnceMessage?.message) m = m.viewOnceMessage.message;
+    if (m.viewOnceMessageV2?.message) m = m.viewOnceMessageV2.message;
+
+    const type = getContentType(m);
     if (type !== "imageMessage" && type !== "documentMessage" && type !== "videoMessage" && type !== "documentWithCaptionMessage") {
       return null;
     }
@@ -122,7 +139,6 @@ export class WhatsAppAdapter implements ChannelAdapter {
         fs.mkdirSync(mediaDir, { recursive: true });
       }
 
-      const m = msg.message!;
       const document = m.documentMessage || m.imageMessage || m.videoMessage || m.documentWithCaptionMessage?.message?.documentMessage;
       const fileName = ((document as any)?.fileName) || 
                        (type === "imageMessage" ? `img_${Date.now()}.jpg` : (type === "videoMessage" ? `vid_${Date.now()}.mp4` : `doc_${Date.now()}.pdf`));
@@ -201,15 +217,27 @@ export class WhatsAppAdapter implements ChannelAdapter {
   }
 
   private extractText(msg: proto.IWebMessageInfo): string | null {
-    const m = msg.message;
+    let m = msg.message;
     if (!m) return null;
+    
+    if (m.ephemeralMessage?.message) {
+      m = m.ephemeralMessage.message;
+    } else if (m.viewOnceMessage?.message) {
+      m = m.viewOnceMessage.message;
+    } else if (m.viewOnceMessageV2?.message) {
+      m = m.viewOnceMessageV2.message;
+    } else if (m.viewOnceMessageV2Extension?.message) {
+      m = m.viewOnceMessageV2Extension.message;
+    } else if (m.documentWithCaptionMessage?.message) {
+      m = m.documentWithCaptionMessage.message;
+    }
+
     return (
-      m.conversation ??
-      m.extendedTextMessage?.text ??
-      m.imageMessage?.caption ??
-      m.videoMessage?.caption ??
-      m.documentMessage?.caption ??
-      m.documentWithCaptionMessage?.message?.documentMessage?.caption ??
+      m.conversation ||
+      m.extendedTextMessage?.text ||
+      m.imageMessage?.caption ||
+      m.videoMessage?.caption ||
+      m.documentMessage?.caption ||
       null
     );
   }

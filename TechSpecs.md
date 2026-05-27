@@ -29,6 +29,11 @@ graph TD
     Divorce <-->|JPA| DB
 ```
 
+### 1.1 Arquitectura de Prompts (Agente)
+- **Concatenación Estructurada**: Se utiliza un único System Message en la posición inicial (índice 0).
+- **Inyección Dinámica (Hot-Reload)**: El prompt final se ensambla concatenando `system.md` (base) con sub-prompts dinámicos basados en el `stageContext`, cargados directamente desde el disco.
+- **Fallback**: Ante la ausencia de un sub-prompt, se registra un warning y se degrada al prompt base.
+
 ---
 
 ## 2. Componentes del Sistema
@@ -78,6 +83,9 @@ graph TD
 
 ### 4.2 Value Objects (Refactorización)
 - Se ha eliminado Lombok de los Value Objects críticos (ej: `CuilVO`) para asegurar compatibilidad con el compilador en el entorno de build del servidor.
+
+### 4.3 Persistencia de Evidencias Digitales
+- **Filtrado Condicional**: La purga de duplicados en la herramienta `submit_digital_evidence` filtra no solo por `document_type` sino condicionalmente por `childFullName` (para actas de nacimiento y CUDs). Esto evita el borrado accidental de documentos pertenecientes a otros hijos.
 
 ---
 

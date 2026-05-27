@@ -46,4 +46,7 @@ public class ChildJpaEntity {
 
     @Column(name = "disabled", nullable = false)
     private boolean disabled;
+
+    @Column(name = "is_student", nullable = false)
+    private boolean student;
 }

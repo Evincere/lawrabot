@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { Logger } from "../utils/logger.js";
 import type { SessionManager } from "../sessions/manager.js";
 import type { ToolRegistry } from "../tools/registry.js";
@@ -14,6 +16,7 @@ export interface MessageRouterDeps {
   llmProvider: LLMProvider;
   channels: Map<string, ChannelAdapter>;
   systemPrompt: string;
+  specDir: string;
   log: Logger;
 }
 
@@ -22,11 +25,76 @@ export interface MessageRouterDeps {
  * Inbound message → session lookup → LLM call → tool execution loop → reply.
  */
 export function createMessageRouter(deps: MessageRouterDeps) {
-  const { sessionManager, toolRegistry, hookRunner, llmProvider, channels, systemPrompt, log } = deps;
+  const { sessionManager, toolRegistry, hookRunner, llmProvider, channels, systemPrompt, specDir, log } = deps;
 
   const MAX_TOOL_ROUNDS = 10;
 
-  return async function handleInbound(message: InboundMessage): Promise<void> {
+  // ── Debounce: acumula mensajes rápidos del mismo conversation ──
+  const DEBOUNCE_WINDOW_MS = 2500; // 2.5 segundos de silencio antes de procesar
+  const pendingMessages = new Map<string, { messages: InboundMessage[]; timer: ReturnType<typeof setTimeout> }>();
+
+  /**
+   * Coalesce rapid-fire messages from the same conversation into a single
+   * processing unit. This handles the common WhatsApp pattern of users sending
+   * a document + caption as two separate messages, or selecting multiple files.
+   */
+  function debounceInbound(message: InboundMessage): void {
+    const key = `${message.channelId}:${message.conversationId}`;
+    const existing = pendingMessages.get(key);
+
+    if (existing) {
+      // Hay mensajes pendientes — agregar y resetear el timer
+      clearTimeout(existing.timer);
+      existing.messages.push(message);
+      log.info(`[debounce] Accumulated message for ${key} (${existing.messages.length} total)`);
+    } else {
+      // Primer mensaje — crear buffer
+      pendingMessages.set(key, { messages: [message], timer: null as any });
+      log.info(`[debounce] New message buffer for ${key}`);
+    }
+
+    // (Re)iniciar timer — cuando expire, procesar todo junto
+    const entry = pendingMessages.get(key)!;
+    entry.timer = setTimeout(async () => {
+      const accumulated = pendingMessages.get(key);
+      pendingMessages.delete(key);
+
+      if (!accumulated || accumulated.messages.length === 0) return;
+
+      if (accumulated.messages.length === 1) {
+        // Un solo mensaje — procesar directamente
+        await processMessage(accumulated.messages[0]);
+      } else {
+        // Múltiples mensajes — coalescerlos en uno
+        log.info(`[debounce] Coalescing ${accumulated.messages.length} messages for ${key}`);
+        const coalesced = coalesceMessages(accumulated.messages);
+        await processMessage(coalesced);
+      }
+    }, DEBOUNCE_WINDOW_MS);
+  }
+
+  /**
+   * Merge multiple InboundMessages into a single one by concatenating
+   * text content. Media blocks and captions are preserved.
+   */
+  function coalesceMessages(messages: InboundMessage[]): InboundMessage {
+    const base = messages[0];
+    const parts: string[] = [];
+
+    for (const msg of messages) {
+      if (msg.text.trim()) {
+        parts.push(msg.text.trim());
+      }
+    }
+
+    return {
+      ...base,
+      text: parts.join("\n\n"),
+      timestamp: messages[messages.length - 1].timestamp, // Usar el timestamp más reciente
+    };
+  }
+
+  async function processMessage(message: InboundMessage): Promise<void> {
     const { channelId, conversationId, senderId, text } = message;
 
     log.info(`[${channelId}] Message from ${senderId}: ${text.slice(0, 80)}...`);
@@ -59,13 +127,7 @@ export function createMessageRouter(deps: MessageRouterDeps) {
     });
 
     try {
-      // Build LLM messages
-      const llmMessages: LLMMessage[] = [
-        { role: "system" as const, content: systemPrompt },
-        ...sessionManager.getContextMessages(session),
-      ];
-
-      // Build tool context
+      // Construir el contexto de la herramienta
       const toolCtx: ToolContext = {
         sessionId: session.id,
         channelId,
@@ -74,7 +136,7 @@ export function createMessageRouter(deps: MessageRouterDeps) {
         config: {},
       };
 
-      // Get stage-aware filtered tools
+      // Obtener las herramientas filtradas y el contexto de la etapa desde la base de datos
       const { tools, stageContext } = await getFilteredTools(
         toolRegistry,
         toolCtx,
@@ -82,7 +144,22 @@ export function createMessageRouter(deps: MessageRouterDeps) {
         log,
       );
 
-      // If we have stage context with an active expediente, inject a hint for the LLM
+      // Resolver y ensamblar el prompt de sistema dinámico según la etapa actual
+      const currentStage = stageContext ? stageContext.stage : "NO_EXPEDIENTE";
+      const finalSystemPrompt = await getDynamicSystemPrompt(
+        specDir,
+        currentStage,
+        systemPrompt,
+        log,
+      );
+
+      // Construir los mensajes para el LLM con el system prompt dinámico en el índice 0
+      const llmMessages: LLMMessage[] = [
+        { role: "system" as const, content: finalSystemPrompt },
+        ...sessionManager.getContextMessages(session),
+      ];
+
+      // Si tenemos contexto de etapa con un expediente activo, inyectamos una pista de sistema
       if (stageContext && stageContext.stage !== "NO_EXPEDIENTE" && stageContext.stage !== "ERROR") {
         llmMessages.push({
           role: "system" as const,
@@ -206,7 +283,83 @@ export function createMessageRouter(deps: MessageRouterDeps) {
           }
 
           // We got a text response — send it
-          let replyText = response.content ?? "Lo siento, no he podido procesar una respuesta adecuada. ¿Podrías reformular tu mensaje?";
+          let replyText =
+            response.content ||
+            "";
+
+          // ── Retry especial para mensajes con MEDIA que el LLM no procesó ──
+          const userText = text; // captured from InboundMessage
+          const hasMedia = userText.includes("[MEDIA]");
+          if (!replyText && hasMedia) {
+            log.warn(`LLM returned empty response for a message with [MEDIA]. Retrying with simplified prompt...`);
+
+            // Extraer la ruta del archivo del bloque [MEDIA]
+            const mediaMatch = userText.match(/\[MEDIA\]\s*localPath=(\S+)\s+fileName=(\S+)\s+mimeType=(\S+)\s*\[\/MEDIA\]/);
+            if (mediaMatch) {
+              const [, localPath, fileName, mimeType] = mediaMatch;
+              // Extraer el texto del usuario (sin el bloque [MEDIA])
+              const captionText = userText.replace(/\n*\[MEDIA\].*\[\/MEDIA\]/s, "").replace(/\[METADATA\].*?\[\/METADATA\]\n?/, "").trim();
+
+              llmMessages.push({
+                role: "user",
+                content: `[SYSTEM] El usuario acaba de enviar un archivo. Datos del archivo:\n- Ruta: ${localPath}\n- Nombre: ${fileName}\n- Tipo MIME: ${mimeType}\n- Mensaje del usuario: "${captionText}"\n\nDEBES llamar a submit_digital_evidence con estos datos. Determiná el documentType correcto y, si es un acta de nacimiento o CUD, incluí el childFullName inferido del mensaje del usuario. Luego confirmá brevemente la recepción.`,
+              });
+
+              const retryMediaResponse = await llmProvider.complete({
+                messages: llmMessages,
+                tools: tools.length > 0 ? tools : undefined,
+              });
+
+              // Si el retry generó tool calls, procesarlas
+              if (retryMediaResponse.finishReason === "tool_calls" && retryMediaResponse.toolCalls.length > 0) {
+                log.info(`Media retry triggered tool call: ${retryMediaResponse.toolCalls.map(tc => tc.function.name).join(", ")}`);
+                // Re-inyectar en el loop para que se procese
+                sessionManager.addMessage(session, {
+                  role: "assistant",
+                  content: retryMediaResponse.content ?? "",
+                  toolCalls: retryMediaResponse.toolCalls,
+                  timestamp: Date.now(),
+                });
+                llmMessages.push({
+                  role: "assistant" as const,
+                  content: retryMediaResponse.content ?? "",
+                  tool_calls: retryMediaResponse.toolCalls,
+                });
+
+                for (const tc of retryMediaResponse.toolCalls) {
+                  const args = typeof tc.function.arguments === "string"
+                    ? JSON.parse(tc.function.arguments)
+                    : tc.function.arguments;
+
+                  const result = await toolRegistry.execute(tc.function.name, args, toolCtx);
+                  sessionManager.addMessage(session, {
+                    role: "tool",
+                    content: result.content,
+                    toolCallId: tc.id,
+                    timestamp: Date.now(),
+                  });
+                  llmMessages.push({
+                    role: "tool" as const,
+                    content: result.content,
+                    tool_call_id: tc.id,
+                  });
+                }
+
+                continue; // Let the LLM process tool results
+              }
+
+              // If retry returned text, use it
+              if (retryMediaResponse.content) {
+                replyText = retryMediaResponse.content;
+                log.info(`Media retry returned text response (${replyText.length} chars).`);
+              }
+            }
+          }
+
+          // Fallback final si sigue vacío
+          if (!replyText) {
+            replyText = "Lo siento, no he podido procesar una respuesta adecuada. ¿Podrías reformular tu mensaje?";
+          }
 
           // ── Post-procesamiento: deduplicación de bloques ──
           replyText = deduplicateBlocks(replyText);
@@ -268,7 +421,7 @@ export function createMessageRouter(deps: MessageRouterDeps) {
         text: "Disculpa, ha ocurrido un error técnico inesperado. Por favor, intenta nuevamente en unos momentos.",
       });
     }
-  };
+  }
 
   async function sendReply(channelId: string, conversationId: string, payload: OutboundMessage) {
     const channel = channels.get(channelId);
@@ -299,6 +452,9 @@ export function createMessageRouter(deps: MessageRouterDeps) {
       }
     }
   }
+
+  // Exponer debounceInbound como el handler público
+  return debounceInbound;
 }
 
 /**
@@ -361,12 +517,15 @@ function deduplicateBlocks(text: string): string {
 
   // Calcular overlap entre dos conjuntos de palabras (Jaccard index)
   const overlap = (a: Set<string>, b: Set<string>): number => {
-    if (a.size === 0 || b.size === 0) return 0;
+    // Ignorar bloques muy cortos (como encabezados) para que no eliminen párrafos grandes
+    if (a.size < 5 || b.size < 5) return 0;
+    
     let intersection = 0;
     for (const word of a) {
       if (b.has(word)) intersection++;
     }
-    return intersection / Math.min(a.size, b.size);
+    const union = a.size + b.size - intersection;
+    return intersection / union;
   };
 
   const kept: string[] = [blocks[0]];
@@ -391,4 +550,69 @@ function deduplicateBlocks(text: string): string {
   }
 
   return kept.join("\n\n");
+}
+
+/**
+ * Carga dinámicamente el sub-prompt de la etapa actual y lo integra con el prompt base.
+ * Aplica degradación segura y fallbacks semánticos si no existe el archivo correspondiente.
+ */
+async function getDynamicSystemPrompt(
+  specDir: string,
+  stage: string | null | undefined,
+  basePrompt: string,
+  log: Logger
+): Promise<string> {
+  // 1. Normalizar la etapa. Si viene nula o vacía, asumimos "NO_EXPEDIENTE"
+  const normalizedStage = (stage || "NO_EXPEDIENTE").toUpperCase().trim();
+
+  // 2. Definir la ruta física del archivo específico para esta fase
+  const phaseFilePath = path.join(specDir, "prompts", "phases", `${normalizedStage}.md`);
+
+  // 3. Intentar cargar el archivo específico de fase
+  if (fs.existsSync(phaseFilePath)) {
+    try {
+      const stagePrompt = fs.readFileSync(phaseFilePath, "utf-8").trim();
+      log.info(`[DynamicPrompt] Loaded stage instructions for: ${normalizedStage}`);
+      return assemblePrompt(basePrompt, stagePrompt, normalizedStage);
+    } catch (error) {
+      log.error(`[DynamicPrompt] Error reading prompt for stage ${normalizedStage}: ${error}`);
+    }
+  }
+
+  // 4. Mecanismo de Fallback Semántico si el archivo no existe en el disco
+  log.warn(`[DynamicPrompt] Phase prompt not found at ${phaseFilePath}. Applying semantic fallback.`);
+
+  // CASO DE FALLO 1: Si falló cargar el archivo de "ERROR"
+  if (normalizedStage === "ERROR") {
+    // Inyectamos una directiva de contingencia segura directamente para que el LLM no alucine
+    const defaultErrorPrompt = `[ATENCIÓN: El sistema ha experimentado una contingencia técnica al recuperar el expediente. Disculpate de manera sumamente cálida y empática con el ciudadano por esta demora, e invitalo a intentar escribir nuevamente en unos minutos. Está PROHIBIDO realizar llamadas a herramientas de base de datos hasta que el servicio se normalice.]`;
+    return assemblePrompt(basePrompt, defaultErrorPrompt, "ERROR_FALLBACK");
+  }
+
+  // CASO DE FALLO 2: Si falló cargar "NO_EXPEDIENTE"
+  if (normalizedStage === "NO_EXPEDIENTE") {
+    log.info(`[DynamicPrompt] Falling back to base system prompt for welcome message.`);
+    return basePrompt;
+  }
+
+  // FALLBACK ABSOLUTO (Cualquier otra etapa física faltante)
+  log.info(`[DynamicPrompt] Falling back to base system prompt only.`);
+  return basePrompt;
+}
+
+/**
+ * Ensambla el prompt base con el sub-prompt usando delimitadores semánticos estructurados.
+ */
+function assemblePrompt(basePrompt: string, stagePrompt: string, stageName: string): string {
+  return [
+    `# SISTEMA: LAWRABOT — MINISTERIO PÚBLICO DE LA DEFENSA (MENDOZA)`,
+    ``,
+    `[REGLAS_CORE_GLOBALES]`,
+    basePrompt,
+    `[/REGLAS_CORE_GLOBALES]`,
+    ``,
+    `[INSTRUCCIONES_ETAPA_ACTUAL: ${stageName}]`,
+    stagePrompt,
+    `[/INSTRUCCIONES_ETAPA_ACTUAL]`
+  ].join("\n");
 }

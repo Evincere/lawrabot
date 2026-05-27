@@ -66,8 +66,10 @@ export async function getFilteredTools(
  * adicional justo antes de la llamada al LLM.
  */
 export function buildStageHint(stageContext: StageContext): string {
+  const today = new Date().toISOString().split("T")[0];
   const lines: string[] = [
     `[STAGE_CONTEXT] Etapa actual del expediente: ${stageContext.stage}.`,
+    `Fecha actual del sistema: ${today}.`,
   ];
 
   if (stageContext.pendingDocuments.length > 0) {

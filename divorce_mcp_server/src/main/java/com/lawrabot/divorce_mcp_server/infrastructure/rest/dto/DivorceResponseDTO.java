@@ -111,6 +111,7 @@ public class DivorceResponseDTO {
         private String birthDate;
         private Integer age;
         private Boolean hasDisability;
+        private Boolean isStudent;
         private String birthCertificateId;
     }
 

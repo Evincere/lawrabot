@@ -89,6 +89,7 @@ export async function startGateway(opts: GatewayOptions): Promise<GatewayServer>
     llmProvider,
     channels,
     systemPrompt: spec.systemPrompt,
+    specDir,
     log,
   });
 
