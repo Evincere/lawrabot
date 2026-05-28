@@ -25,12 +25,14 @@ import {
   Certificate,
   DownloadSimple,
   Files,
-  Stamp
+  Stamp,
+  FirstAidKit
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/lib/contexts/ToastContext";
 import Image from "next/image";
+import { ObservationModal } from "@/components/shared/ObservationModal";
 
 interface ProfileTabProps {
   expediente: Expediente;
@@ -148,7 +150,7 @@ interface AddressDisplayProps {
   onCopyFromOther?: () => void;
 }
 
-const AddressDisplay = ({ label, address, isEditing, data, setData, icon: Icon }: AddressDisplayProps) => {
+const AddressDisplay = ({ label, address, isEditing, data, setData, icon: Icon, onCopyFromOther }: AddressDisplayProps) => {
   const [copied, setCopied] = useState(false);
   const fullAddress = address ? `${address.street || ""} ${address.number || ""}, ${address.locality || ""}`.trim() : "";
 
@@ -255,9 +257,22 @@ export function ProfileTab({ expediente, evidences, onUpdate, onEvidenceStatusUp
   const [isEditingChildren, setIsEditingChildren] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [previewEvidence, setPreviewEvidence] = useState<EvidenceItem | null>(null);
+  const [observingEvidence, setObservingEvidence] = useState<EvidenceItem | null>(null);
+
+  const handleConfirmObservation = (reason: string) => {
+    if (observingEvidence) {
+      onEvidenceStatusUpdate(observingEvidence.id, false, reason);
+      setObservingEvidence(null);
+      if (previewEvidence && previewEvidence.id === observingEvidence.id) {
+        setPreviewEvidence(null);
+      }
+    }
+  };
   
-  // Filtrar solo las partidas de nacimiento
+  // Filtrar evidencias por tipo
   const birthCerts = evidences.filter(ev => ev.documentType === "BIRTH_CERT");
+  const disabilityCerts = evidences.filter(ev => ev.documentType === "DISABILITY_CERT");
+  const childrenWithDisability = expediente.children?.filter(c => c.hasDisability) || [];
   
   const [petitionerData, setPetitionerData] = useState<SpouseUpdateData>({
     fullName: expediente.petitioner?.fullName?.fullName || "",
@@ -756,43 +771,78 @@ export function ProfileTab({ expediente, evidences, onUpdate, onEvidenceStatusUp
           </div>
         ) : childrenView === "cards" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {expediente.children.map((child, idx) => (
-              <div key={idx} className="p-6 rounded-2xl bg-surface border border-border flex flex-col gap-4 relative overflow-hidden group hover:border-accent/40 transition-all cursor-pointer" onClick={() => {
-                navigator.clipboard.writeText(`${child.name} - DNI ${child.dni}`);
-                showToast(`Copiado: ${child.name}`, "info");
-              }}>
-                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-background border border-border flex items-center justify-center text-zinc-500 group-hover:text-accent">
-                       <IdentificationCard size={24} weight="duotone" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                       <p className="text-base font-black tracking-tight text-white uppercase truncate">{child.name}</p>
-                       <div className="flex gap-2 mt-1">
-                          <span className="text-[10px] bg-background/80 px-2 py-0.5 rounded-md border border-border text-zinc-500 font-black uppercase">{child.age} AÑOS</span>
-                          {child.hasDisability && (
-                            <span className="text-[10px] bg-danger/10 text-danger border border-danger/30 px-2 py-0.5 rounded-md font-black uppercase">DISCAPACIDAD</span>
-                          )}
-                          {child.birthCertificateId && (
-                            <span className="text-[10px] bg-success/10 text-success border border-success/30 px-2 py-0.5 rounded-md font-black uppercase flex items-center gap-1">
-                              <CheckCircle size={10} weight="fill" />
-                              ACTA OK
-                            </span>
-                          )}
-                        </div>
-                    </div>
-                 </div>
-                 <div className="grid grid-cols-2 gap-3 mt-2 pointer-events-none">
-                    <div className="bg-background/30 p-2.5 rounded-lg border border-border/50">
-                       <span className="text-[8px] font-black text-zinc-600 uppercase block tracking-widest">DNI</span>
-                       <p className="text-xs font-bold text-white tracking-widest mt-1">{child.dni || "S/D"}</p>
-                    </div>
-                    <div className="bg-background/30 p-2.5 rounded-lg border border-border/50">
-                       <span className="text-[8px] font-black text-zinc-600 uppercase block tracking-widest">F. Nacimiento</span>
-                       <p className="text-xs font-bold text-white mt-1">{child.birthDate || "S/D"}</p>
-                    </div>
-                 </div>
-              </div>
-            ))}
+            {expediente.children.map((child, idx) => {
+              // Buscar acta vinculada por childFullName
+              const linkedBirthCert = birthCerts.find(ev => 
+                ev.childFullName && ev.childFullName.toLowerCase() === child.name.toLowerCase()
+              );
+              const linkedDisabilityCert = child.hasDisability 
+                ? disabilityCerts.find(ev =>
+                    ev.childFullName && ev.childFullName.toLowerCase() === child.name.toLowerCase()
+                  )
+                : null;
+              const hasBirthCert = !!linkedBirthCert || !!child.birthCertificateId;
+              const hasCUD = !!linkedDisabilityCert;
+
+              return (
+                <div key={idx} className="p-6 rounded-2xl bg-surface border border-border flex flex-col gap-4 relative overflow-hidden group hover:border-accent/40 transition-all cursor-pointer" onClick={() => {
+                  navigator.clipboard.writeText(`${child.name} - DNI ${child.dni}`);
+                  showToast(`Copiado: ${child.name}`, "info");
+                }}>
+                   <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-background border border-border flex items-center justify-center text-zinc-500 group-hover:text-accent">
+                         <IdentificationCard size={24} weight="duotone" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                         <p className="text-base font-black tracking-tight text-white uppercase truncate">{child.name}</p>
+                         <div className="flex flex-wrap gap-1.5 mt-1.5">
+                            <span className="text-[10px] bg-background/80 px-2 py-0.5 rounded-md border border-border text-zinc-500 font-black uppercase">{child.age} AÑOS</span>
+                            {child.hasDisability && (
+                              <span className="text-[10px] bg-danger/10 text-danger border border-danger/30 px-2 py-0.5 rounded-md font-black uppercase">DISCAPACIDAD</span>
+                            )}
+                          </div>
+                      </div>
+                   </div>
+                   <div className="grid grid-cols-2 gap-3 pointer-events-none">
+                      <div className="bg-background/30 p-2.5 rounded-lg border border-border/50">
+                         <span className="text-[8px] font-black text-zinc-600 uppercase block tracking-widest">DNI</span>
+                         <p className="text-xs font-bold text-white tracking-widest mt-1">{child.dni || "S/D"}</p>
+                      </div>
+                      <div className="bg-background/30 p-2.5 rounded-lg border border-border/50">
+                         <span className="text-[8px] font-black text-zinc-600 uppercase block tracking-widest">F. Nacimiento</span>
+                         <p className="text-xs font-bold text-white mt-1">{child.birthDate || "S/D"}</p>
+                      </div>
+                   </div>
+
+                   {/* Documentación vinculada */}
+                   <div className="border-t border-border/50 pt-3 space-y-2 pointer-events-none">
+                     <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Documentación</span>
+                     <div className="flex flex-col gap-1.5">
+                       <div className={cn(
+                         "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase",
+                         hasBirthCert 
+                           ? "bg-success/10 text-success border border-success/20" 
+                           : "bg-warning/10 text-warning border border-warning/20"
+                       )}>
+                         {hasBirthCert ? <CheckCircle size={12} weight="fill" /> : <WarningCircle size={12} weight="fill" />}
+                         {hasBirthCert ? "Acta de Nacimiento ✓" : "Acta Pendiente"}
+                       </div>
+                       {child.hasDisability && (
+                         <div className={cn(
+                           "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase",
+                           hasCUD 
+                             ? "bg-success/10 text-success border border-success/20" 
+                             : "bg-danger/10 text-danger border border-danger/20 animate-pulse"
+                         )}>
+                           {hasCUD ? <CheckCircle size={12} weight="fill" /> : <FirstAidKit size={12} weight="fill" />}
+                           {hasCUD ? "CUD Presentado ✓" : "CUD Requerido"}
+                         </div>
+                       )}
+                     </div>
+                   </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="rounded-2xl bg-surface border border-border overflow-hidden">
@@ -807,37 +857,63 @@ export function ProfileTab({ expediente, evidences, onUpdate, onEvidenceStatusUp
                  </tr>
                </thead>
                <tbody className="divide-y divide-border/50">
-                 {expediente.children.map((child, idx) => (
-                   <tr key={idx} className="group hover:bg-white/[0.02] transition-colors cursor-pointer" onClick={() => {
-                     navigator.clipboard.writeText(child.dni);
-                     showToast(`DNI Copiado: ${child.dni}`, "info");
-                   }}>
-                     <td className="px-6 py-4 text-sm font-bold text-white uppercase tracking-tight">{child.name}</td>
-                     <td className="px-6 py-4 text-sm font-medium text-zinc-400 tracking-widest">{child.dni || "S/D"}</td>
-                     <td className="px-6 py-4 text-sm font-bold text-white text-center">
-                        <span className="bg-background px-3 py-1 rounded-full border border-border text-[10px]">{child.age}</span>
-                     </td>
-                     <td className="px-6 py-4 text-sm font-medium text-zinc-400">{child.birthDate || "S/D"}</td>
-                     <td className="px-6 py-4">
-                         <div className="flex flex-col gap-1.5">
-                            {child.hasDisability && (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-danger/10 text-danger text-[9px] font-black border border-danger/30 uppercase w-fit">
-                                 <WarningCircle size={10} weight="fill" />
-                                 Discapacidad
-                              </span>
-                            )}
-                            {child.birthCertificateId ? (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-success/10 text-success text-[9px] font-black border border-success/30 uppercase w-fit">
-                                 <CheckCircle size={10} weight="fill" />
-                                 Acta Vinculada
-                              </span>
-                            ) : (
-                              <span className="text-zinc-600 text-[10px] font-medium italic">Sin acta vinculada</span>
-                            )}
-                         </div>
+                 {expediente.children.map((child, idx) => {
+                    const linkedBirthCert = birthCerts.find(ev => 
+                      ev.childFullName && ev.childFullName.toLowerCase() === child.name.toLowerCase()
+                    );
+                    const hasBirthCert = !!linkedBirthCert || !!child.birthCertificateId;
+                    const linkedCUD = child.hasDisability 
+                      ? disabilityCerts.find(ev => ev.childFullName && ev.childFullName.toLowerCase() === child.name.toLowerCase())
+                      : null;
+
+                    return (
+                    <tr key={idx} className="group hover:bg-white/[0.02] transition-colors cursor-pointer" onClick={() => {
+                      navigator.clipboard.writeText(child.dni);
+                      showToast(`DNI Copiado: ${child.dni}`, "info");
+                    }}>
+                      <td className="px-6 py-4 text-sm font-bold text-white uppercase tracking-tight">{child.name}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-zinc-400 tracking-widest">{child.dni || "S/D"}</td>
+                      <td className="px-6 py-4 text-sm font-bold text-white text-center">
+                         <span className="bg-background px-3 py-1 rounded-full border border-border text-[10px]">{child.age}</span>
                       </td>
-                   </tr>
-                 ))}
+                      <td className="px-6 py-4 text-sm font-medium text-zinc-400">{child.birthDate || "S/D"}</td>
+                      <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1.5">
+                             {child.hasDisability && (
+                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-danger/10 text-danger text-[9px] font-black border border-danger/30 uppercase w-fit">
+                                  <WarningCircle size={10} weight="fill" />
+                                  Discapacidad
+                               </span>
+                             )}
+                             {hasBirthCert ? (
+                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-success/10 text-success text-[9px] font-black border border-success/30 uppercase w-fit">
+                                  <CheckCircle size={10} weight="fill" />
+                                  Acta Vinculada
+                               </span>
+                             ) : (
+                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-warning/10 text-warning text-[9px] font-black border border-warning/30 uppercase w-fit">
+                                  <WarningCircle size={10} weight="fill" />
+                                  Acta Pendiente
+                               </span>
+                             )}
+                             {child.hasDisability && (
+                               linkedCUD ? (
+                                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-success/10 text-success text-[9px] font-black border border-success/30 uppercase w-fit">
+                                    <CheckCircle size={10} weight="fill" />
+                                    CUD Presentado
+                                 </span>
+                               ) : (
+                                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-danger/10 text-danger text-[9px] font-black border border-danger/30 uppercase w-fit animate-pulse">
+                                    <FirstAidKit size={10} weight="fill" />
+                                    CUD Requerido
+                                 </span>
+                               )
+                             )}
+                          </div>
+                       </td>
+                    </tr>
+                    );
+                  })}
                </tbody>
              </table>
           </div>
@@ -903,6 +979,11 @@ export function ProfileTab({ expediente, evidences, onUpdate, onEvidenceStatusUp
                 </div>
 
                 <div className="p-5 flex flex-col gap-4">
+                  {ev.childFullName && (
+                    <span className="text-[9px] font-black uppercase tracking-widest text-accent bg-accent/10 border border-accent/20 px-2.5 py-1 rounded-lg w-fit">
+                      {ev.childFullName}
+                    </span>
+                  )}
                   <p className="text-xs font-bold text-white truncate uppercase tracking-tight" title={ev.fileName}>{ev.fileName}</p>
 
                   <div className="flex gap-2">
@@ -915,10 +996,7 @@ export function ProfileTab({ expediente, evidences, onUpdate, onEvidenceStatusUp
                           Aprobar
                         </button>
                         <button
-                          onClick={() => {
-                            const reason = prompt("Motivo de la observación:");
-                            if (reason) onEvidenceStatusUpdate(ev.id, false, reason);
-                          }}
+                          onClick={() => setObservingEvidence(ev)}
                           className="flex-1 px-3 py-2.5 rounded-xl bg-danger/10 border border-danger/20 text-danger text-[10px] font-black uppercase tracking-widest hover:bg-danger/20 transition-all active:scale-95"
                         >
                           Observar
@@ -941,6 +1019,110 @@ export function ProfileTab({ expediente, evidences, onUpdate, onEvidenceStatusUp
           </div>
         )}
       </section>
+
+      {/* 4.b Certificados de Discapacidad (CUD) */}
+      {childrenWithDisability.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-8">
+            <FirstAidKit size={18} weight="fill" className="text-zinc-600" />
+            <h6 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Certificados de Discapacidad (CUD)</h6>
+            <span className={cn(
+              "ml-auto px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border",
+              disabilityCerts.length >= childrenWithDisability.length
+                ? "bg-success/10 text-success border-success/20" 
+                : "bg-danger/10 text-danger border-danger/20 shadow-lg shadow-danger/10"
+            )}>
+              {disabilityCerts.length >= childrenWithDisability.length 
+                ? `${disabilityCerts.length} presentado${disabilityCerts.length > 1 ? "s" : ""}` 
+                : `${disabilityCerts.length}/${childrenWithDisability.length} — Faltante`}
+            </span>
+          </div>
+
+          {disabilityCerts.length === 0 ? (
+            <div className="p-12 rounded-3xl bg-surface/30 border-2 border-dashed border-danger/30 flex flex-col items-center justify-center gap-4 group hover:border-danger/50 transition-all">
+              <FirstAidKit size={40} weight="thin" className="text-danger/50 group-hover:scale-110 transition-transform duration-500" />
+              <div className="text-center">
+                <p className="text-sm font-bold text-zinc-500">CUD no presentado</p>
+                <p className="text-[10px] uppercase tracking-widest text-zinc-700 mt-1 max-w-sm leading-relaxed">
+                  Se requiere el Certificado Único de Discapacidad para:<br />
+                  {childrenWithDisability.map(c => c.name).join(", ")}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {disabilityCerts.map((ev) => (
+                <div key={ev.id} className="rounded-2xl bg-surface border border-border overflow-hidden flex flex-col group hover:border-border-strong transition-all hover:shadow-2xl hover:shadow-black/20">
+                  <div
+                    className="h-44 bg-background flex items-center justify-center cursor-pointer relative overflow-hidden"
+                    onClick={() => setPreviewEvidence(ev)}
+                  >
+                    {ev.mimeType?.startsWith("image/") ? (
+                      <Image
+                        src={`http://localhost:8081/api/divorce/evidence/download/${ev.id}`}
+                        alt={ev.fileName}
+                        fill
+                        unoptimized
+                        className="object-cover group-hover:scale-110 transition-transform duration-1000"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-zinc-600 group-hover:text-accent transition-colors">
+                        <Files size={40} weight="thin" />
+                        <span className="text-[10px] uppercase tracking-widest font-black">DOCUMENTO PDF</span>
+                      </div>
+                    )}
+
+                    <div className={cn(
+                      "absolute top-3 right-3 px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest border backdrop-blur-md",
+                      ev.approved ? "bg-success/20 text-success border-success/30" :
+                      ev.rejectionReason ? "bg-danger/20 text-danger border-danger/30" : "bg-warning/20 text-warning border-warning/30"
+                    )}>
+                      {ev.approved ? "Validada" : ev.rejectionReason ? "Observada" : "En Revisión"}
+                    </div>
+                  </div>
+
+                  <div className="p-5 flex flex-col gap-4">
+                    {ev.childFullName && (
+                      <span className="text-[9px] font-black uppercase tracking-widest text-danger bg-danger/10 border border-danger/20 px-2.5 py-1 rounded-lg w-fit">
+                        {ev.childFullName}
+                      </span>
+                    )}
+                    <p className="text-xs font-bold text-white truncate uppercase tracking-tight" title={ev.fileName}>{ev.fileName}</p>
+
+                    <div className="flex gap-2">
+                      {!ev.approved && !ev.rejectionReason && (
+                        <>
+                          <button
+                            onClick={() => onEvidenceStatusUpdate(ev.id, true)}
+                            className="flex-1 px-3 py-2.5 rounded-xl bg-success/10 border border-success/20 text-success text-[10px] font-black uppercase tracking-widest hover:bg-success/20 transition-all active:scale-95"
+                          >
+                            Aprobar
+                          </button>
+                          <button
+                            onClick={() => setObservingEvidence(ev)}
+                            className="flex-1 px-3 py-2.5 rounded-xl bg-danger/10 border border-danger/20 text-danger text-[10px] font-black uppercase tracking-widest hover:bg-danger/20 transition-all active:scale-95"
+                          >
+                            Observar
+                          </button>
+                        </>
+                      )}
+                      <a
+                        href={`http://localhost:8081/api/divorce/evidence/download/${ev.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2.5 rounded-xl bg-background border border-border text-zinc-500 hover:text-white hover:border-border-strong transition-all"
+                        title="Descargar CUD"
+                      >
+                        <DownloadSimple size={18} weight="bold" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* 5. Lightbox Previsualización */}
       <AnimatePresence>
@@ -992,8 +1174,15 @@ export function ProfileTab({ expediente, evidences, onUpdate, onEvidenceStatusUp
                 <p className="text-lg font-black text-white uppercase tracking-tight">{previewEvidence.fileName}</p>
                 <div className="flex items-center justify-center gap-3 mt-2">
                   <span className="px-3 py-1 bg-white/5 rounded-lg border border-white/10 text-[10px] font-black text-zinc-400 uppercase tracking-widest">
-                    Partida de Nacimiento
+                    {previewEvidence.documentType === "BIRTH_CERT" ? "Partida de Nacimiento" : 
+                     previewEvidence.documentType === "DISABILITY_CERT" ? "Certificado de Discapacidad" :
+                     previewEvidence.documentType === "MARRIAGE_CERT" ? "Acta de Matrimonio" : previewEvidence.documentType}
                   </span>
+                  {previewEvidence.childFullName && (
+                    <span className="px-3 py-1 bg-accent/10 rounded-lg border border-accent/20 text-[10px] font-black text-accent uppercase tracking-widest">
+                      {previewEvidence.childFullName}
+                    </span>
+                  )}
                   {previewEvidence.approved && (
                     <span className="px-3 py-1 bg-success/10 rounded-lg border border-success/20 text-[10px] font-black text-success uppercase tracking-widest flex items-center gap-2">
                       <CheckCircle size={12} weight="fill" />
@@ -1001,11 +1190,42 @@ export function ProfileTab({ expediente, evidences, onUpdate, onEvidenceStatusUp
                     </span>
                   )}
                 </div>
+
+                {!previewEvidence.approved && !previewEvidence.rejectionReason && (
+                  <div className="flex items-center justify-center gap-4 mt-6">
+                    <button
+                      onClick={() => {
+                        onEvidenceStatusUpdate(previewEvidence.id, true);
+                        setPreviewEvidence(null);
+                      }}
+                      className="px-6 py-3 bg-success/20 border border-success/30 text-success rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-success/30 transition-all hover:scale-105 active:scale-95"
+                    >
+                      Aprobar Documento
+                    </button>
+                    <button
+                      onClick={() => {
+                        setObservingEvidence(previewEvidence);
+                      }}
+                      className="px-6 py-3 bg-danger/20 border border-danger/30 text-danger rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-danger/30 transition-all hover:scale-105 active:scale-95"
+                    >
+                      Solicitar Corrección
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ObservationModal
+        key={observingEvidence?.id || "none"}
+        isOpen={observingEvidence !== null}
+        onClose={() => setObservingEvidence(null)}
+        evidenceName={observingEvidence?.fileName || ""}
+        evidenceType={observingEvidence?.documentType || ""}
+        onConfirm={handleConfirmObservation}
+      />
     </div>
   );
 }

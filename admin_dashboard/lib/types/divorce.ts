@@ -152,6 +152,7 @@ export interface EvidenceItem {
   mimeType: string;
   approved: boolean;
   rejectionReason: string | null;
+  childFullName: string | null;
   createdAt: string;
 }
 

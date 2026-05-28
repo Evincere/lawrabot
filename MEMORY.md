@@ -101,6 +101,10 @@ lawrabot/
 - **Vínculo Oficial**: `marriageCertificateId` vincula el expediente con el archivo de evidencia validado.
 - **Validación Técnica**: Alerta visual si el acta tiene más de 6 meses (`marriageCertificateIssuanceDate`).
 - **Datos Registrales**: El operador carga Tomo, Folio, Acta Nº y Oficina para la demanda.
+- **Normalización de Fechas**: Ayudante `normalizeDate` integrado en el portapapeles (📋) del frontend para autotraducir formatos argentinos (`DD/MM/YYYY`) a formato ISO (`YYYY-MM-DD`) compatible con el backend y inputs del navegador.
+- **Persistencia Corregida (JPA Mapper)**: Resuelta omisión de mapeo en `ExpedienteMapper.java` del backend, garantizando que el ID del acta y la fecha de emisión se guarden y carguen correctamente de la base de datos PostgreSQL.
+- **Visualización de Oficina**: El nombre de la Oficina / Registro Civil se visualiza directamente en la sección consolidada de lectura ("Lugar y Emisión").
+- **Pantalla Dividida (Split-Screen)**: Formulario de carga registral integrado lateralmente al visor del PDF para carga ágil por parte del operador humano.
 
 ---
 

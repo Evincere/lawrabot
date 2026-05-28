@@ -47,6 +47,8 @@ import com.lawrabot.divorce_mcp_server.infrastructure.rest.dto.DivorceResponseDT
 import com.lawrabot.divorce_mcp_server.infrastructure.rest.dto.DivorceResponseDTO.RespondentDTO;
 import com.lawrabot.divorce_mcp_server.infrastructure.rest.dto.DivorceResponseDTO.SocioEconomicProfileDTO;
 import com.lawrabot.divorce_mcp_server.infrastructure.rest.dto.UpdateCaseDataRequest;
+import com.lawrabot.divorce_mcp_server.infrastructure.persistence.entity.DigitalEvidenceJpaEntity;
+import com.lawrabot.divorce_mcp_server.infrastructure.persistence.repository.jpa.SpringDataDigitalEvidenceRepository;
 
 @RestController
 @RequestMapping("/api/divorce")
@@ -56,9 +58,12 @@ public class DivorceRestController {
     private static final Logger log = LoggerFactory.getLogger(DivorceRestController.class);
 
     private final IExpedienteRepository expedienteRepository;
+    private final SpringDataDigitalEvidenceRepository digitalEvidenceRepository;
 
-    public DivorceRestController(IExpedienteRepository expedienteRepository) {
+    public DivorceRestController(IExpedienteRepository expedienteRepository,
+                                 SpringDataDigitalEvidenceRepository digitalEvidenceRepository) {
         this.expedienteRepository = expedienteRepository;
+        this.digitalEvidenceRepository = digitalEvidenceRepository;
     }
 
     @GetMapping("/cases")
@@ -120,6 +125,36 @@ public class DivorceRestController {
                         .map(this::mapToChild)
                         .collect(Collectors.toList());
                 exp.setChildren(childList);
+
+                // Sincronizar la vinculación de actas en digital_evidences
+                List<DigitalEvidenceJpaEntity> caseEvidences = digitalEvidenceRepository.findByExpediente_IdOrderByCreatedAtDesc(id);
+                for (UpdateCaseDataRequest.ChildUpdateDTO childDto : request.getChildren()) {
+                    String childName = childDto.getName();
+                    if (childName != null && !childName.isEmpty()) {
+                        String linkedCertIdStr = childDto.getBirthCertificateId();
+
+                        // Desvincular este nombre de cualquier otra evidencia del mismo expediente
+                        caseEvidences.stream()
+                            .filter(ev -> childName.equalsIgnoreCase(ev.getChildFullName()))
+                            .forEach(ev -> {
+                                ev.setChildFullName(null);
+                                digitalEvidenceRepository.save(ev);
+                            });
+
+                        // Vincular el acta especificada
+                        if (linkedCertIdStr != null && !linkedCertIdStr.isEmpty() && !"S/D".equals(linkedCertIdStr)) {
+                            try {
+                                UUID certId = UUID.fromString(linkedCertIdStr);
+                                digitalEvidenceRepository.findById(certId).ifPresent(ev -> {
+                                    ev.setChildFullName(childName);
+                                    digitalEvidenceRepository.save(ev);
+                                });
+                            } catch (IllegalArgumentException e) {
+                                log.warn("Formato de UUID de acta inválido: {}", linkedCertIdStr);
+                            }
+                        }
+                    }
+                }
             }
 
             // Update Marriage Certificate Details
@@ -310,6 +345,15 @@ public class DivorceRestController {
 
     private DivorceResponseDTO mapToDTO(Expediente expediente) {
         if (expediente == null) return null;
+        List<DigitalEvidenceJpaEntity> evidences = List.of();
+        if (expediente.getId() != null) {
+            evidences = digitalEvidenceRepository.findByExpediente_IdOrderByCreatedAtDesc(expediente.getId());
+        }
+        return mapToDTO(expediente, evidences);
+    }
+
+    private DivorceResponseDTO mapToDTO(Expediente expediente, List<DigitalEvidenceJpaEntity> evidences) {
+        if (expediente == null) return null;
 
         // Cache common properties from expediente to avoid multiple getter calls (Rule[coding-standards.md])
         final Spouse petitioner = expediente.getPetitioner();
@@ -478,6 +522,19 @@ public class DivorceRestController {
             childrenDTOs = children.stream().map(c -> {
                 final DNIVO cDni = c.getDni();
                 final LocalDate cBirth = c.getBirthDate();
+                
+                // Buscar el ID del acta de nacimiento vinculada de forma dinámica
+                String birthCertId = c.getBirthCertificateId();
+                if ((birthCertId == null || birthCertId.isEmpty() || "S/D".equals(birthCertId)) && evidences != null) {
+                    final String childName = c.getFullName();
+                    birthCertId = evidences.stream()
+                        .filter(e -> "BIRTH_CERT".equalsIgnoreCase(e.getDocumentType()))
+                        .filter(e -> e.getChildFullName() != null && e.getChildFullName().equalsIgnoreCase(childName))
+                        .map(e -> e.getId().toString())
+                        .findFirst()
+                        .orElse(null);
+                }
+
                 return ChildDTO.builder()
                     .name(c.getFullName())
                     .dni(cDni != null ? cDni.getValue() : "S/D")
@@ -485,7 +542,7 @@ public class DivorceRestController {
                     .age(c.getAge())
                     .hasDisability(c.isDisabled())
                     .isStudent(c.isStudent())
-                    .birthCertificateId(c.getBirthCertificateId())
+                    .birthCertificateId(birthCertId)
                     .build();
             }).collect(Collectors.toList());
         }
