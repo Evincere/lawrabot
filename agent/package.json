@@ -47,8 +47,10 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@whiskeysockets/baileys",
       "esbuild",
-      "protobufjs"
+      "protobufjs",
+      "sharp"
     ]
   }
 }
