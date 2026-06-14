@@ -20,19 +20,19 @@ export interface StageContext {
 export async function getFilteredTools(
   toolRegistry: ToolRegistry,
   toolCtx: ToolContext,
-  phoneNumber: string,
+  contactId: string,
   log: Logger,
 ): Promise<{ tools: LLMToolDefinition[]; stageContext: StageContext | null }> {
   const allTools = toolRegistry.toLLMTools();
 
-  if (!phoneNumber) {
+  if (!contactId) {
     return { tools: allTools, stageContext: null };
   }
 
   try {
     const result = await toolRegistry.execute(
       "get_stage_context",
-      { phoneNumber },
+      { contactId },
       toolCtx,
     );
 

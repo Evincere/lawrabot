@@ -30,7 +30,8 @@ export function createMessageRouter(deps: MessageRouterDeps) {
   const MAX_TOOL_ROUNDS = 10;
 
   // ── Debounce: acumula mensajes rápidos del mismo conversation ──
-  const DEBOUNCE_WINDOW_MS = 2500; // 2.5 segundos de silencio antes de procesar
+  const TEXT_DEBOUNCE_MS = 2500; // 2.5 segundos para mensajes de texto
+  const MEDIA_DEBOUNCE_MS = 5000; // 5 segundos para mensajes con adjuntos (fotos tardan más)
   const pendingMessages = new Map<string, { messages: InboundMessage[]; timer: ReturnType<typeof setTimeout> }>();
 
   /**
@@ -54,7 +55,11 @@ export function createMessageRouter(deps: MessageRouterDeps) {
     }
 
     // (Re)iniciar timer — cuando expire, procesar todo junto
+    // Usar ventana más larga si algún mensaje acumulado contiene adjuntos
     const entry = pendingMessages.get(key)!;
+    const hasMedia = entry.messages.some((m) => m.text.includes("[MEDIA]"));
+    const debounceMs = hasMedia ? MEDIA_DEBOUNCE_MS : TEXT_DEBOUNCE_MS;
+
     entry.timer = setTimeout(async () => {
       const accumulated = pendingMessages.get(key);
       pendingMessages.delete(key);
@@ -70,7 +75,7 @@ export function createMessageRouter(deps: MessageRouterDeps) {
         const coalesced = coalesceMessages(accumulated.messages);
         await processMessage(coalesced);
       }
-    }, DEBOUNCE_WINDOW_MS);
+    }, debounceMs);
   }
 
   /**
@@ -117,7 +122,7 @@ export function createMessageRouter(deps: MessageRouterDeps) {
 
     // Enrich the user message with sender metadata so the LLM can access the real phone number
     // instead of hallucinating it. The metadata block is prepended to the first message of each session.
-    const enrichedContent = `[METADATA] phoneNumber=${phoneFromJid} [/METADATA]\n${text}`;
+    const enrichedContent = `[METADATA] contactId=${phoneFromJid} [/METADATA]\n${text}`;
 
     // Add user message
     sessionManager.addMessage(session, {
@@ -170,18 +175,33 @@ export function createMessageRouter(deps: MessageRouterDeps) {
       // Signal "typing" to the user
       await updatePresence(channelId, conversationId, "typing");
 
-      // Patience timer (25 seconds)
-      const TYPING_TIMEOUT = 25000;
+      // ── Patience timer: mensajes progresivos, máximo 2 ──
+      const PATIENCE_INTERVAL_MS = 25000;
+      const MAX_PATIENCE_MESSAGES = 2;
+      const PATIENCE_TEXTS = [
+        "Un momento, por favor. Estoy procesando tu solicitud...",
+        "Sigo trabajando en tu consulta, gracias por tu paciencia...",
+      ];
+      let patienceCount = 0;
       const patienceTimer = setInterval(async () => {
+        if (patienceCount >= MAX_PATIENCE_MESSAGES) {
+          // Después de 2 mensajes, solo mantener typing sin enviar más texto
+          try {
+            await updatePresence(channelId, conversationId, "typing");
+          } catch { /* silencioso */ }
+          return;
+        }
         try {
-          log.info(`[${channelId}] Sending patience message to ${senderId}...`);
-          await sendReply(channelId, conversationId, { text: "Un momento, por favor. Estoy procesando tu solicitud..." });
+          const msg = PATIENCE_TEXTS[patienceCount] ?? PATIENCE_TEXTS[PATIENCE_TEXTS.length - 1];
+          log.info(`[${channelId}] Sending patience message ${patienceCount + 1}/${MAX_PATIENCE_MESSAGES} to ${senderId}`);
+          await sendReply(channelId, conversationId, { text: msg });
+          patienceCount++;
           // After sending a message, the typing indicator is lost, so we restart it
           await updatePresence(channelId, conversationId, "typing");
         } catch (err) {
           log.error(`Failed to send patience message: ${err}`);
         }
-      }, TYPING_TIMEOUT);
+      }, PATIENCE_INTERVAL_MS);
 
       // Agent loop: call LLM, execute tools, repeat until text reply
       let round = 0;
@@ -364,6 +384,9 @@ export function createMessageRouter(deps: MessageRouterDeps) {
           // ── Post-procesamiento: deduplicación de bloques ──
           replyText = deduplicateBlocks(replyText);
 
+          // ── Sanitización de leaks de chain-of-thought ──
+          replyText = sanitizeCoTLeak(replyText);
+
           // ── Detección de output degenerado ──
           if (isDegenerate(replyText)) {
             log.warn(`Degenerate LLM output detected (${replyText.length} chars). Attempting recovery...`);
@@ -379,7 +402,8 @@ export function createMessageRouter(deps: MessageRouterDeps) {
               tools: tools.length > 0 ? tools : undefined,
             });
 
-            const retryText = retryResponse.content ?? "";
+            let retryText = retryResponse.content ?? "";
+            retryText = sanitizeCoTLeak(retryText);
             if (!isDegenerate(retryText) && retryText.length > 10) {
               replyText = retryText;
               log.info(`Recovery successful (${retryText.length} chars).`);
@@ -395,6 +419,9 @@ export function createMessageRouter(deps: MessageRouterDeps) {
             content: replyText,
             timestamp: Date.now(),
           });
+
+          // ── Sanitización final pre-envío (última barrera) ──
+          replyText = sanitizeBeforeSend(replyText, log);
 
           // Fire hook and send
           await hookRunner.run("before_reply", { channelId, conversationId, text: replyText });
@@ -458,37 +485,141 @@ export function createMessageRouter(deps: MessageRouterDeps) {
 }
 
 /**
- * Detecta output degenerado del LLM (loops de "...", "The...", caracteres sueltos, etc.).
+ * Detecta output degenerado del LLM (loops de "...", texto fragmentado,
+ * caracteres invisibles, leaks de chain-of-thought, etc.).
  * Retorna true si el texto parece corrupto y no debería enviarse al usuario.
  */
 function isDegenerate(text: string): boolean {
   if (!text || text.length < 30) return false;
 
-  // Contar ocurrencias de "..." (3+ puntos consecutivos) Y "…" (unicode ellipsis)
+  // ── Caracteres Unicode invisibles (zero-width space/joiner/etc.) ──
+  const invisibleChars = (text.match(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060]/g) || []).length;
+  if (invisibleChars > 3) return true;
+
+  // ── Contar ellipsis (ASCII y Unicode) ──
   const asciiEllipsis = (text.match(/\.{3,}/g) || []).length;
   const unicodeEllipsis = (text.match(/…/g) || []).length;
   const totalEllipsis = asciiEllipsis + unicodeEllipsis;
-
-  // Si hay más de 5 ellipsis en total, es basura
   if (totalEllipsis > 5) return true;
 
-  // Ratio de contenido real vs. espacios/puntos/newlines/ellipsis/asteriscos
-  const meaningfulChars = text.replace(/[\s.*…\n\r\-()¡¿?!]/g, "").length;
+  // ── Ratio de contenido significativo vs. relleno ──
+  const meaningfulChars = text.replace(/[\s.*…\n\r\-()¡¿?!────│\u200B\u200C\u200D\uFEFF]/g, "").length;
   const totalChars = text.length;
   const meaningfulRatio = meaningfulChars / totalChars;
-
-  // Si menos del 35% del mensaje es contenido real, es degenerado
   if (totalChars > 100 && meaningfulRatio < 0.35) return true;
 
-  // Patrón de repetición: palabras cortas seguidas de puntos
+  // ── Separador sin contenido real posterior ──
+  // Detecta: "────" seguido de líneas casi vacías (< 10 chars significativos)
+  const separatorMatch = text.match(/────+/g);
+  if (separatorMatch) {
+    for (const sep of separatorMatch) {
+      const afterSep = text.slice(text.indexOf(sep) + sep.length).trim();
+      const afterMeaningful = afterSep.replace(/[\s.*…\n\r\-()¡¿?!│\u200B\u200C\u200D\uFEFF]/g, "");
+      if (afterMeaningful.length < 10 && afterSep.length > 0) return true;
+    }
+  }
+
+  // ── Patrón de repetición ──
   const repeatedFragments = (text.match(/\b(The|We|This|\.\.\.)\.\.\./gi) || []).length;
   if (repeatedFragments > 3) return true;
 
-  // Patrón de cambio de idioma abrupto (español→inglés) indica confusión del modelo
-  const englishWords = (text.match(/\b(The|We|This|That|And|But|For|With)\b/g) || []).length;
-  if (englishWords > 3) return true;
+  // ── Chain-of-thought leak: frases meta-cognitivas del modelo ──
+  const cotPatterns = [
+    /\bWe see that\b/i,
+    /\bNeed to correct\b/i,
+    /\bMust follow\b/i,
+    /\bLet's produce\b/i,
+    /\bThe assistant\b/i,
+    /\bthe response\b/i,
+    /\boutput is\b/i,
+    /\bWe need to\b/i,
+    /\bAlso need to\b/i,
+    /\bThis is not following\b/i,
+    /\brequired structure\b/i,
+    /\bLet me\b/i,
+    /\bI need to\b/i,
+    /\bI should\b/i,
+  ];
+  const cotHits = cotPatterns.filter((p) => p.test(text)).length;
+  if (cotHits >= 3) return true;
+
+  // ── Cambio de idioma abrupto (español→inglés) ──
+  const englishWords = (text.match(/\b(The|We|This|That|And|But|For|With|Must|Should|Also|correct|format|response|output|structure|follow)\b/g) || []).length;
+  if (englishWords > 4) return true;
 
   return false;
+}
+
+/**
+ * Elimina leaks de chain-of-thought (razonamiento interno del modelo)
+ * que a veces se filtran en la respuesta final. Limpia bloques que
+ * contienen frases meta-cognitivas en inglés o marcadores de "reinicio".
+ */
+function sanitizeCoTLeak(text: string): string {
+  if (!text) return text;
+
+  // Eliminar bloques de texto que parecen razonamiento interno del modelo
+  // (líneas consecutivas en inglés con frases meta-cognitivas)
+  const cotBlockPattern = /(?:^|\n)(?:(?:We |The |This |Must |Need |Also |Let |I ).*(?:\n|$)){2,}/gi;
+  let cleaned = text.replace(cotBlockPattern, "\n");
+
+  // Eliminar líneas que empiezan con "---" consecutivos (indicador de reinicio)
+  cleaned = cleaned.replace(/^-{3,}\s*$/gm, "");
+
+  // Eliminar líneas sueltas con frases de razonamiento
+  const cotLinePatterns = [
+    /^.*\bWe see that\b.*$/gim,
+    /^.*\bNeed to correct\b.*$/gim,
+    /^.*\bMust follow the required\b.*$/gim,
+    /^.*\bLet's produce\b.*$/gim,
+    /^.*\bThis is not following format\b.*$/gim,
+    /^.*\bcorrect final answer\b.*$/gim,
+  ];
+  for (const pattern of cotLinePatterns) {
+    cleaned = cleaned.replace(pattern, "");
+  }
+
+  // Colapsar múltiples líneas vacías
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+
+  return cleaned;
+}
+
+/**
+ * Última barrera de sanitización antes de enviar un mensaje al usuario.
+ * Limpia caracteres invisibles, colapsa líneas vacías, y valida
+ * que el mensaje tenga contenido significativo.
+ */
+function sanitizeBeforeSend(text: string, log: Logger): string {
+  if (!text) return "Lo siento, no he podido procesar una respuesta adecuada. ¿Podrías reformular tu mensaje?";
+
+  let sanitized = text;
+
+  // 1. Eliminar caracteres Unicode invisibles
+  sanitized = sanitized.replace(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060]/g, "");
+
+  // 2. Eliminar líneas que solo tienen espacios, asteriscos sueltos o separadores huérfanos
+  sanitized = sanitized.replace(/^[\s*]+$/gm, "");
+
+  // 3. Colapsar múltiples líneas vacías consecutivas en máximo 2
+  sanitized = sanitized.replace(/\n{3,}/g, "\n\n");
+
+  // 4. Limpiar espacios excesivos dentro de líneas (ej: "Para            ?")
+  sanitized = sanitized.replace(/ {4,}/g, " ");
+
+  // 5. Eliminar separadores huérfanos (────) que no tienen contenido útil después
+  sanitized = sanitized.replace(/────+\s*\n\s*\n\s*$/g, "");
+
+  sanitized = sanitized.trim();
+
+  // 6. Validar que quede contenido significativo
+  const meaningful = sanitized.replace(/[\s.*…\n\r\-()¡¿?!────│emoji]/g, "");
+  if (meaningful.length < 15) {
+    log.warn(`sanitizeBeforeSend: message has insufficient content after cleanup (${meaningful.length} chars). Using fallback.`);
+    return "Perfecto, los datos fueron registrados. ¿Podemos continuar con el siguiente paso del trámite?";
+  }
+
+  return sanitized;
 }
 
 /**
@@ -616,3 +747,11 @@ function assemblePrompt(basePrompt: string, stagePrompt: string, stageName: stri
     `[/INSTRUCCIONES_ETAPA_ACTUAL]`
   ].join("\n");
 }
+
+// ── Exportar utilidades internas para testing ──
+export const _testing = {
+  isDegenerate,
+  sanitizeCoTLeak,
+  sanitizeBeforeSend,
+  deduplicateBlocks,
+};

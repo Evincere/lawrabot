@@ -56,7 +56,7 @@ export interface Expediente {
     street?: string;
     number?: string;
   };
-  regulatoryAgreement?: Record<string, unknown>;
+  regulatoryAgreement?: RegulatoryAgreement;
   rawAgreementText?: string;
   children?: { 
     id?: string;
@@ -180,3 +180,124 @@ export interface MarriageCertificateRequest {
   registryOffice: string;
   place: string;
 }
+
+// ============================================
+// Convenio Regulador (Art. 439 CCyC)
+// ============================================
+
+export type AgreementStatus = "PROPOSED" | "ACCEPTED" | "REJECTED" | "HOMOLOGATED";
+
+export type PersonalCareType =
+  | "SHARED_INDISTINCT"
+  | "SHARED_ALTERNATED"
+  | "UNILATERAL_PETITIONER"
+  | "UNILATERAL_RESPONDENT"
+  | "OTHER";
+
+export type MainResidence = "PETITIONER" | "RESPONDENT" | "BOTH_EQUITABLE" | "OTHER";
+
+export type CommunicationRegimeType =
+  | "BROAD_AND_FLEXIBLE"
+  | "SPECIFIC_SCHEDULE"
+  | "RESTRICTED_SUPERVISED"
+  | "OTHER";
+
+export type ProvisionType = "MONETARY" | "IN_KIND" | "MIXED" | "OTHER";
+
+export type PaymentFrequency = "MONTHLY" | "FORTNIGHTLY" | "WEEKLY" | "ONE_OFF" | "OTHER";
+
+export type PaymentMethod =
+  | "BANK_TRANSFER"
+  | "JUDICIAL_DEPOSIT"
+  | "CASH"
+  | "EMPLOYER_WITHHOLDING"
+  | "OTHER";
+
+export type UpdateMechanism = "IPC_INDEX" | "SALARY_PARITY" | "SMVM_PERCENTAGE" | "NONE" | "OTHER";
+
+export type CurrencyParameter =
+  | "ARS"
+  | "USD"
+  | "SALARY_PERCENTAGE"
+  | "SMVM_PERCENTAGE"
+  | "JUS_PERCENTAGE"
+  | "OTHER";
+
+export type HomeAttribution = "PETITIONER" | "RESPONDENT" | "BOTH_SALE" | "OTHER";
+
+export type SpouseRole = "PETITIONER" | "RESPONDENT" | "BOTH" | "OTHER";
+
+export type CompensationPayment = "SINGLE_PAYMENT" | "INSTALLMENTS" | "USUFRUCT" | "OTHER";
+
+export interface AlimonyAmount {
+  value?: number;
+  currencyOrParameter?: CurrencyParameter;
+  customParameter?: string;
+}
+
+export interface PersonalCare {
+  id?: string;
+  careType?: PersonalCareType;
+  customCareType?: string;
+  mainResidence?: MainResidence;
+  customMainResidence?: string;
+}
+
+export interface CommunicationRegime {
+  id?: string;
+  regimeType?: CommunicationRegimeType;
+  customRegimeType?: string;
+  regularSchedule?: string;
+  holidaySchedule?: string;
+  pickUpLocationDescription?: string;
+  supervisorName?: string;
+}
+
+export interface AlimonyProvision {
+  id?: string;
+  provisionType?: ProvisionType;
+  customProvisionType?: string;
+  amount?: AlimonyAmount;
+  paymentFrequency?: PaymentFrequency;
+  customPaymentFrequency?: string;
+  paymentMethod?: PaymentMethod;
+  customPaymentMethod?: string;
+  paymentDetails?: string;
+  updateMechanism?: UpdateMechanism;
+  customUpdateMechanism?: string;
+}
+
+export interface AssetDistribution {
+  id?: string;
+  homeAttributionTo?: HomeAttribution;
+  customHomeAttributionTo?: string;
+  homeAttributionTerm?: string;
+  assetsSummary?: string;
+  liabilitiesSummary?: string;
+}
+
+export interface EconomicCompensation {
+  id?: string;
+  appliesEconomicCompensation?: boolean;
+  beneficiary?: SpouseRole;
+  imbalanceJustification?: string;
+  paymentMethod?: CompensationPayment;
+  customPaymentMethod?: string;
+  compensationAmount?: AlimonyAmount;
+  installmentsCount?: number;
+  updateMechanism?: UpdateMechanism;
+  customUpdateMechanism?: string;
+  inKindPaymentDescription?: string;
+}
+
+export interface RegulatoryAgreement {
+  id?: string;
+  status?: AgreementStatus;
+  includesChildrenProvisions?: boolean;
+  personalCare?: PersonalCare;
+  communicationRegime?: CommunicationRegime;
+  alimonyProvision?: AlimonyProvision;
+  assetDistribution?: AssetDistribution;
+  economicCompensation?: EconomicCompensation;
+}
+

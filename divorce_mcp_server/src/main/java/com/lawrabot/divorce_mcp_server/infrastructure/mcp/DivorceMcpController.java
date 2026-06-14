@@ -45,6 +45,16 @@ import java.util.Map;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+// Imports de Apache PDFBox
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.multipdf.PDFMergerUtility;
+import org.apache.pdfbox.io.RandomAccessRead;
+import org.apache.pdfbox.io.RandomAccessReadBuffer;
+
 @Component
 @Slf4j
 public class DivorceMcpController {
@@ -122,21 +132,21 @@ public class DivorceMcpController {
         return com.lawrabot.divorce_mcp_server.domain.valueobject.PhoneNumberVO.of(rawPhone).getValue();
     }
 
-    private UUID resolveExpedienteId(String phoneNumber) {
-        String normalized = normalizePhone(phoneNumber);
+    private UUID resolveExpedienteId(String contactId) {
+        String normalized = normalizePhone(contactId);
         return expedienteDomainRepo.findActiveByClientPhone(normalized)
-                .orElseThrow(() -> new IllegalArgumentException("status: NOT_FOUND. No se encontró expediente activo para: " + phoneNumber))
+                .orElseThrow(() -> new IllegalArgumentException("status: NOT_FOUND. No se encontró expediente activo para: " + contactId))
                 .getId();
     }
 
     @Tool(name = "start_divorce_process", description = "Inicia una solicitud de proceso judicial de divorcio en el sistema.")
     public String startDivorceProcess(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId,
             @JsonPropertyDescription("Primer nombre del cliente (extraido del resultado BLSG)") String firstName,
             @JsonPropertyDescription("Apellido del cliente (extraido del resultado BLSG)") String lastName,
             @JsonPropertyDescription("DNI del solicitante, ya proporcionado para la consulta BLSG") String dni) {
         // Normalizar para garantizar consistencia con la clave del cache de BLSG
-        String normalized = normalizePhone(phoneNumber);
+        String normalized = normalizePhone(contactId);
         Expediente exp = createDivorceDossierUseCase.execute(normalized, firstName, lastName, dni);
         
         // Buscar resultado cacheado por clave normalizada
@@ -168,7 +178,7 @@ public class DivorceMcpController {
 
     @Tool(name = "set_divorce_modality", description = "Establece si el divorcio es UNILATERAL o JOINT (conjunto).")
     public String setDivorceModality(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId,
             @JsonPropertyDescription("Modalidad elegida: UNILATERAL o JOINT") String modality) {
         com.lawrabot.divorce_mcp_server.domain.enums.DivorceTypeEnum type;
         try {
@@ -178,7 +188,7 @@ public class DivorceMcpController {
         }
 
         try {
-            setDivorceModalityUseCase.execute(phoneNumber, type);
+            setDivorceModalityUseCase.execute(contactId, type);
             return "Modalidad establecida como: " + type.name() + ". [NEXT_STEP] Pide SOLO los datos personales del peticionante: nacionalidad, ocupación, fecha de nacimiento, domicilio real y email. NO pidas datos de la contraparte ni documentos todavía.";
         } catch (Exception e) {
             return "Error al establecer modalidad: " + e.getMessage();
@@ -187,18 +197,19 @@ public class DivorceMcpController {
 
     @Tool(name = "get_dossier_stage", description = "Obtiene la etapa actual del proceso judicial mediante el teléfono.")
     public String getDossierStage(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber) {
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId) {
         try {
-            DataCollectionStageEnum stage = getExpedienteCollectionStageUseCase.queryByClientPhone(phoneNumber);
+            DataCollectionStageEnum stage = getExpedienteCollectionStageUseCase.queryByClientPhone(contactId);
             return "La etapa actual del cliente es: " + stage.name();
         } catch (Exception e) {
-            return "status: NOT_FOUND. No se encontró expediente activo para: " + phoneNumber;
+            return "status: NOT_FOUND. No se encontró expediente activo para: " + contactId;
         }
     }
 
     @Tool(name = "submit_petitioner_personal_data", description = "Recolección de datos personales completos del peticionante.")
     public String submitPetitionerPersonalData(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono técnico del remitente (extraído de [METADATA], ej: 5492634515362 o LID). PROHIBIDO inventar.") String contactId,
+            @JsonPropertyDescription("Teléfono de contacto real del peticionante (si el contactId era un LID, enviá acá el que el usuario te dio. Si no era LID, enviá el de la metadata).") String contactPhone,
             @JsonPropertyDescription("Nacionalidad") String nationality,
             @JsonPropertyDescription("Ocupación") String occupation,
             @JsonPropertyDescription("Correo electrónico (Opcional)") String email,
@@ -215,15 +226,15 @@ public class DivorceMcpController {
                 .zipCode(address.zipCode())
                 .build();
 
-        submitPersonalDataUseCase.execute(phoneNumber, com.lawrabot.divorce_mcp_server.domain.enums.CaseRole.PETITIONER, 
-                null, null, phoneNumber, nationality, occupation, email, birthDate, addressVO);
+        submitPersonalDataUseCase.execute(contactId, com.lawrabot.divorce_mcp_server.domain.enums.CaseRole.PETITIONER, 
+                null, null, contactPhone, nationality, occupation, email, birthDate, addressVO);
         
         return "Datos del peticionante registrados. [NEXT_STEP] Pide los datos de la ex-pareja (contraparte): nombre completo, DNI, nacionalidad, ocupación, fecha de nacimiento, domicilio actual, teléfono y email. NO pidas documentos ni datos socioeconómicos todavía.";
     }
 
     @Tool(name = "submit_respondent_personal_data", description = "Recolección de datos personales de la ex-pareja (contraparte).")
     public String submitRespondentPersonalData(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId,
             @JsonPropertyDescription("Nombre completo (solo para unilateral o si no se tiene)") String fullName,
             @JsonPropertyDescription("DNI (solo para unilateral o si no se tiene)") String dni,
             @JsonPropertyDescription("Teléfono de la contraparte (opcional)") String participantPhone,
@@ -243,7 +254,7 @@ public class DivorceMcpController {
                 .zipCode(address.zipCode())
                 .build();
 
-        submitPersonalDataUseCase.execute(phoneNumber, com.lawrabot.divorce_mcp_server.domain.enums.CaseRole.RESPONDENT, 
+        submitPersonalDataUseCase.execute(contactId, com.lawrabot.divorce_mcp_server.domain.enums.CaseRole.RESPONDENT, 
                 fullName, dni, participantPhone, nationality, occupation, email, birthDate, addressVO);
         
         return "Datos de la contraparte registrados. [NEXT_STEP] Pide al usuario SOLO la evaluación socioeconómica: empleo formal (sí/no), ingreso mensual aproximado, tipo de vivienda (alquilada/propia/familiar), cantidad de vehículos. NO menciones documentos de ingresos todavía. NO pidas datos del matrimonio todavía.";
@@ -251,12 +262,12 @@ public class DivorceMcpController {
 
     @Tool(name = "submit_marriage_details", description = "Guarda los detalles del matrimonio en el expediente.")
     public String submitMarriageDetails(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId,
             @JsonPropertyDescription("Fecha de matrimonio en formato ISO (YYYY-MM-DD). El agente debe convertir cualquier formato coloquial del usuario a este formato.") String marriageDate,
             @JsonPropertyDescription("Fecha de separación en formato ISO (YYYY-MM-DD). Si el usuario solo indica mes y año, usar el primer día del mes (ej: 2020-02-01).") String separationDate,
             @JsonPropertyDescription("Ultimo domicilio conyugal. IMPORTANTE: separar calle y numero en campos DISTINTOS 'street' y 'number'. Ejemplo correcto: {street:'Alem', number:'456', locality:'San Rafael', province:'Mendoza'}. PROHIBIDO usar claves en espanol (calle/numero/localidad/provincia).") AddressDto lastResidence) {
             
-        UUID expedienteId = resolveExpedienteId(phoneNumber);
+        UUID expedienteId = resolveExpedienteId(contactId);
 
         AddressVO address = null;
         if (lastResidence != null) {
@@ -281,7 +292,7 @@ public class DivorceMcpController {
 
     @Tool(name = "submit_children_info", description = "Carga la información de los hijos al expediente.")
     public String submitChildrenInfo(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId,
             @JsonPropertyDescription("Lista de hijos en formato texto simple. Cada elemento DEBE tener el formato exacto: 'nombre_completo | YYYY-MM-DD | DNI_o_null | disabled=true/false | isStudent=true/false/null'. Ej: ['Aleixo Toledo | 2009-09-20 | 51711299 | disabled=false | isStudent=null']. Si no hay hijos, enviá [].") List<String> childrenCsv) {
             
         List<ChildDto> children = new java.util.ArrayList<>();
@@ -307,7 +318,7 @@ public class DivorceMcpController {
             }
         }
 
-        UUID expedienteId = resolveExpedienteId(phoneNumber);
+        UUID expedienteId = resolveExpedienteId(contactId);
         if (children.isEmpty()) {
             Expediente exp = expedienteDomainRepo.findById(expedienteId)
                     .orElseThrow(() -> new IllegalArgumentException("Expediente no encontrado."));
@@ -489,7 +500,7 @@ public class DivorceMcpController {
 
     @Tool(name = "submit_socioeconomic_info", description = "Completa los datos del análisis socioeconómico para el BLSG.")
     public String submitSocioEconomicInfo(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId,
             @JsonPropertyDescription("Ingreso mensual promedio en ARS") Double monthlyIncomeArs,
             @JsonPropertyDescription("Situación habitacional (Opción en español o inglés)") String housingSituation,
             @JsonPropertyDescription("Ocupación actual (profesión u oficio)") String occupation,
@@ -497,7 +508,7 @@ public class DivorceMcpController {
             @JsonPropertyDescription("¿Posee empleo formal?") boolean hasFormalEmployment,
             @JsonPropertyDescription("Observaciones adicionales") String observations) {
             
-        UUID expedienteId = resolveExpedienteId(phoneNumber);
+        UUID expedienteId = resolveExpedienteId(contactId);
         HousingSituationEnum housingEnum = null;
         try {
             if (housingSituation != null && !housingSituation.isBlank()) {
@@ -561,11 +572,11 @@ public class DivorceMcpController {
 
     @Tool(name = "consultar_blsg", description = "Consulta el Beneficio de Litigar Sin Gastos (BLSG) en el Poder Judicial de Mendoza.")
     public String consultarBlsg(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId,
             @JsonPropertyDescription("DNI del ciudadano") String dni) {
         log.info("Tool MCP: consultar_blsg - DNI: {}", dni);
         // Normalizar el número para uso consistente en cache y búsquedas
-        String normalized = normalizePhone(phoneNumber);
+        String normalized = normalizePhone(contactId);
         ConsultarBlsgUseCase.ScrapingResult result = consultarBlsgUseCase.execute(normalized, dni);
         
         if (!result.success()) {
@@ -627,11 +638,11 @@ public class DivorceMcpController {
 
     @Tool(name = "consultar_blsg_respondent", description = "Consulta BLSG para la ex-pareja (solo para proceso conjunto).")
     public String consultarBlsgRespondent(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId,
             @JsonPropertyDescription("DNI del segundo cónyuge") String dni) {
         
         log.info("Tool MCP: consultar_blsg_respondent - DNI: {}", dni);
-        ConsultarBlsgUseCase.ScrapingResult result = consultarBlsgUseCase.execute(phoneNumber, dni);
+        ConsultarBlsgUseCase.ScrapingResult result = consultarBlsgUseCase.execute(contactId, dni);
         
         if (!result.success()) {
             return "❌ Error en la consulta del segundo cónyuge: " + result.benefitStatus();
@@ -648,7 +659,7 @@ public class DivorceMcpController {
         } else {
             // Vincular como RESPONDENT
             try {
-                UUID expedienteId = resolveExpedienteId(phoneNumber);
+                UUID expedienteId = resolveExpedienteId(contactId);
                 com.lawrabot.divorce_mcp_server.domain.enums.BlsgScrapingResultEnum domainResult = 
                     result.benefitStatus().contains("Se otorga") 
                     ? com.lawrabot.divorce_mcp_server.domain.enums.BlsgScrapingResultEnum.PROVISIONALLY_APPROVED 
@@ -685,19 +696,19 @@ public class DivorceMcpController {
 
     @Tool(name = "draft_regulatory_agreement", description = "Guarda el borrador del convenio regulador.")
     public String draftRegulatoryAgreement(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId,
             @JsonPropertyDescription("Resumen de la propuesta acordada") String proposalSummary) {
             
-        UUID expedienteId = resolveExpedienteId(phoneNumber);
+        UUID expedienteId = resolveExpedienteId(contactId);
         draftRegulatoryAgreementUseCase.draftAlimony(expedienteId, proposalSummary);
         return "El borrador de la propuesta de Convenio Regulador ha sido guardado exitosamente. [NEXT_STEP] El expediente está ahora COMPLETO. Informa al ciudadano de forma muy cálida que el trámite ha concluido esta primera etapa y pasa a revisión de un operador de la Defensoría. LUEGO PREGÚNTALE DIRECTAMENTE: '¿Querés que te envíe ahora un resumen del trámite en PDF?'.";
     }
 
     @Tool(name = "validate_agreement_legality", description = "Ejecuta validaciones legales preventivas sobre el expediente.")
     public String validateAgreementLegality(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber) {
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId) {
         try {
-            UUID expedienteId = resolveExpedienteId(phoneNumber);
+            UUID expedienteId = resolveExpedienteId(contactId);
             List<String> validaciones = validateAgreementLegalityUseCase.executeSanityCheck(expedienteId);
 
             if (validaciones.isEmpty()) {
@@ -714,9 +725,9 @@ public class DivorceMcpController {
 
     @Tool(name = "generate_referral_summary_pdf", description = "Genera un resumen en PDF para que el ciudadano lo presente en la defensoría presencial.")
     public String generateReferralSummaryPdf(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber) {
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId) {
         try {
-            String pdfPath = generateReferralPdfUseCase.execute(phoneNumber);
+            String pdfPath = generateReferralPdfUseCase.execute(contactId);
             return "El resumen de derivación ha sido generado con éxito. Ubicación del documento: " + pdfPath;
         } catch (Exception e) {
             return "Error generando PDF: " + e.getMessage();
@@ -725,9 +736,9 @@ public class DivorceMcpController {
 
     @Tool(name = "get_pending_tasks", description = "OBLIGATORIO EN CADA INTERACCIÓN. Consulta si existen tareas u observaciones activas asignadas por el operador humano. Si esta herramienta devuelve tareas, el agente DEBE priorizar su resolución por encima de cualquier otro flujo. PROHIBIDO asumir que no hay tareas sin ejecutar esta herramienta primero.")
     public String getPendingTasks(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber) {
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId) {
         try {
-            UUID expedienteId = resolveExpedienteId(phoneNumber);
+            UUID expedienteId = resolveExpedienteId(contactId);
             List<Observation> observations = manageObservationsUseCase.getObservationsByExpedienteAndStatus(
                     expedienteId, com.lawrabot.divorce_mcp_server.domain.enums.ObservationStatusEnum.ASSIGNED_TO_BOT);
             
@@ -780,14 +791,14 @@ public class DivorceMcpController {
 
     @Tool(name = "submit_digital_evidence", description = "Registra un archivo (foto/PDF) enviado por el ciudadano como evidencia digital.")
     public String submitDigitalEvidence(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId,
             @JsonPropertyDescription("MANDATORIO EXACTO: Usa estrictamente uno de: 'DNI_FRONT', 'DNI_BACK', 'MARRIAGE_CERT', 'BIRTH_CERT', 'INCOME_PROOF' (bono de sueldo o certificado negativo ANSES), 'DISABILITY_CERT' (CUD), 'OTHER'. ¡NO uses descripciones en español!") String documentType,
             @JsonPropertyDescription("Ruta local absoluta del archivo descargado por el agente") String localFilePath,
             @JsonPropertyDescription("Nombre sugerido para el archivo") String fileName,
             @JsonPropertyDescription("Opcional: Nombre completo del hijo al que corresponde el documento (si aplica). Inferilo del mensaje del usuario, ej: 'esta es el acta de Micaela' → 'Micaela Toledo Pereyra'. Si no se puede determinar, dejá null.") @org.springframework.lang.Nullable String childFullName,
             @JsonPropertyDescription("Opcional: ID de la tarea de observación asociada") @org.springframework.lang.Nullable UUID taskId) {
         try {
-            UUID expedienteId = resolveExpedienteId(phoneNumber);
+            UUID expedienteId = resolveExpedienteId(contactId);
             ExpedienteJpaEntity expediente = expedienteRepository.findById(java.util.Objects.requireNonNull(expedienteId))
                     .orElseThrow(() -> new IllegalArgumentException("Expediente no encontrado"));
 
@@ -802,54 +813,130 @@ public class DivorceMcpController {
                 Files.createDirectories(uploadDir);
             }
 
-            // Normalizar el nombre del archivo
-            String finalFileName = (fileName != null && !fileName.isBlank()) ? fileName : sourcePath.getFileName().toString();
-            Path targetPath = uploadDir.resolve(finalFileName);
-
-            // Mover el archivo al almacenamiento oficial
-            Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
-
-            // Registrar en base de datos
-            String mimeType = Files.probeContentType(targetPath);
+            // 1. Detección y conversión automática a PDF
+            boolean isImage = false;
+            String originalName = sourcePath.getFileName().toString().toLowerCase();
+            if (originalName.endsWith(".jpg") || originalName.endsWith(".jpeg") || 
+                originalName.endsWith(".png") || originalName.endsWith(".webp") || 
+                originalName.endsWith(".jfif")) {
+                isImage = true;
+            }
             
-            // Purgar duplicados: buscar todas las evidencias NO aprobadas de este tipo para este expediente
+            Path finalSourcePath = sourcePath;
+            Path tempPdfToDelete = null;
+            if (isImage) {
+                try {
+                    tempPdfToDelete = convertImageToPdf(sourcePath);
+                    finalSourcePath = tempPdfToDelete;
+                } catch (Exception e) {
+                    log.error("Fallo al convertir imagen a PDF: {}", e.getMessage(), e);
+                    return "Error técnico al convertir la imagen a formato PDF: " + e.getMessage();
+                }
+            }
+
+            // Normalizar el nombre del archivo final
+            String baseFileName = (fileName != null && !fileName.isBlank()) ? fileName : sourcePath.getFileName().toString();
+            // Asegurarnos de que termine con .pdf
+            if (!baseFileName.toLowerCase().endsWith(".pdf")) {
+                baseFileName += ".pdf";
+            }
+            // Limpiar caracteres extraños
+            baseFileName = baseFileName.replaceAll("[^a-zA-Z0-9.-]", "_");
+            Path targetPath = uploadDir.resolve(baseFileName);
+
+            // Buscar evidencias anteriores de este tipo para este expediente
             List<DigitalEvidenceJpaEntity> others = digitalEvidenceRepository.findByExpediente_IdOrderByCreatedAtDesc(expedienteId).stream()
-                .filter(ev -> ev.getDocumentType().equalsIgnoreCase(documentType) && !ev.isApproved())
+                .filter(ev -> ev.getDocumentType().equalsIgnoreCase(documentType))
                 .filter(ev -> {
-                    // Si es un documento asociado a un hijo, solo purgar si corresponde al mismo hijo
+                    // Si es específico de un hijo, filtrar por hijo
                     if ("BIRTH_CERT".equalsIgnoreCase(documentType) || "DISABILITY_CERT".equalsIgnoreCase(documentType) || "STUDENT_PROOF".equalsIgnoreCase(documentType)) {
                         if (childFullName == null) {
                             return ev.getChildFullName() == null;
                         }
                         return childFullName.equalsIgnoreCase(ev.getChildFullName());
                     }
-                    // Para otros documentos generales (matrimonio, ingresos), se purgan siempre
                     return true;
                 })
                 .collect(Collectors.toList());
-            
-            DigitalEvidenceJpaEntity evidence;
+
+            DigitalEvidenceJpaEntity evidence = null;
+            boolean shouldMerge = false;
+
             if (!others.isEmpty()) {
-                // Nos quedamos con la más reciente para actualizarla
-                evidence = others.get(0);
-                // Borramos cualquier otro duplicado que se haya creado por error
-                if (others.size() > 1) {
-                    digitalEvidenceRepository.deleteAll(java.util.Objects.requireNonNull(others.subList(1, others.size())));
-                    log.info("Purgados {} duplicados de evidencia '{}' para el expediente {}", 
-                            others.size() - 1, documentType, expedienteId);
+                DigitalEvidenceJpaEntity lastEvidence = others.get(0);
+                
+                // Si la última evidencia fue impugnada (tiene rejectionReason) o está aprobada,
+                // iniciamos un set de carga nuevo reemplazando lo anterior.
+                if (lastEvidence.getRejectionReason() != null || lastEvidence.isApproved()) {
+                    log.info("PDF: Se detectó una evidencia previa impugnada o aprobada. Reemplazando por completo.");
+                    
+                    // Borrar el archivo anterior de forma física de forma segura
+                    try {
+                        Files.deleteIfExists(Paths.get(lastEvidence.getFilePath()));
+                    } catch (IOException e) {
+                        log.warn("No se pudo borrar el archivo físico anterior: {}", e.getMessage());
+                    }
+                    
+                    // Eliminar todos los registros anteriores de la base de datos
+                    digitalEvidenceRepository.deleteAll(others);
+                    evidence = DigitalEvidenceJpaEntity.builder()
+                            .id(UUID.randomUUID())
+                            .expediente(expediente)
+                            .build();
+                } else {
+                    // Si ya existe una evidencia pendiente, fusionamos con ella
+                    evidence = lastEvidence;
+                    shouldMerge = true;
+                    
+                    // Si por algún error quedaron más de una evidencia duplicada pendiente, las eliminamos
+                    if (others.size() > 1) {
+                        digitalEvidenceRepository.deleteAll(others.subList(1, others.size()));
+                    }
                 }
             } else {
+                // Si no hay evidencias previas, creamos un registro limpio
                 evidence = DigitalEvidenceJpaEntity.builder()
                         .id(UUID.randomUUID())
                         .expediente(expediente)
                         .build();
             }
-            
+
+            // 2. Ejecutar almacenamiento (Fusión o Copiado)
+            if (shouldMerge) {
+                // Fusionar el nuevo PDF al final del PDF existente
+                Path existingPdfPath = Paths.get(evidence.getFilePath());
+                if (Files.exists(existingPdfPath)) {
+                    try {
+                        mergePdfs(existingPdfPath, finalSourcePath);
+                    } catch (Exception e) {
+                        log.error("Fallo al fusionar documentos PDF: {}", e.getMessage(), e);
+                        return "Error técnico al fusionar las páginas del documento: " + e.getMessage();
+                    }
+                } else {
+                    // Si el archivo físico ya no existía en el disco por algún motivo, simplemente lo copiamos
+                    Files.copy(finalSourcePath, existingPdfPath, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } else {
+                // Copiar el archivo PDF consolidado inicial
+                Files.copy(finalSourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                evidence.setFilePath(targetPath.toAbsolutePath().toString());
+            }
+
+            // Eliminar el PDF temporal creado de la imagen
+            if (tempPdfToDelete != null) {
+                try {
+                    Files.deleteIfExists(tempPdfToDelete);
+                } catch (IOException e) {
+                    log.warn("No se pudo eliminar el PDF temporal: {}", e.getMessage());
+                }
+            }
+
+            // Registrar en base de datos
             evidence.setDocumentType(documentType);
-            evidence.setFileName(finalFileName);
-            evidence.setFilePath(targetPath.toAbsolutePath().toString());
-            evidence.setMimeType(mimeType != null ? mimeType : "application/octet-stream");
+            evidence.setFileName(baseFileName);
+            evidence.setMimeType("application/pdf");
             evidence.setApproved(false);
+            evidence.setRejectionReason(null); // Resetear rechazo si se reutilizó la entidad
             evidence.setChildFullName(childFullName);
             evidence.setCreatedAt(LocalDateTime.now());
 
@@ -858,7 +945,7 @@ public class DivorceMcpController {
             // Si hay un taskId, completar la tarea automáticamente
             if (taskId != null) {
                 try {
-                    manageObservationsUseCase.markTaskAsCompleted(taskId, "Documento digital recibido: " + finalFileName);
+                    manageObservationsUseCase.markTaskAsCompleted(taskId, "Documento digital recibido: " + baseFileName);
                     log.info("Tarea {} completada automáticamente tras recibir evidencia", taskId);
                 } catch (Exception e) {
                     log.warn("No se pudo completar la tarea {} automáticamente: {}", taskId, e.getMessage());
@@ -871,55 +958,16 @@ public class DivorceMcpController {
             String nextStep;
             switch (documentType.toUpperCase()) {
                 case "MARRIAGE_CERT":
-                    Expediente marriageExp = expedienteDomainRepo.findById(expedienteId).orElse(null);
-                    if (marriageExp != null && marriageExp.getCollectionStage() == DataCollectionStageEnum.PENDING_MARRIAGE_DETAILS) {
-                        marriageExp.updateCollectionStage(DataCollectionStageEnum.PENDING_CHILDREN_INFO);
-                        expedienteDomainRepo.save(marriageExp);
-                        log.info("Stage avanzado a PENDING_CHILDREN_INFO tras recibir MARRIAGE_CERT para expediente {}", expedienteId);
-                    }
-                    nextStep = " [NEXT_STEP] Confirma recepción del acta de matrimonio. Luego pregunta: ¿tuvieron hijos en común? NO pidas otro documento todavía.";
+                    nextStep = " [NEXT_STEP] Confirma la recepción de la página del acta de matrimonio. Indica al usuario que si tiene más páginas que las envíe ahora, o que escriba 'listo' si ya terminó de cargarlo por completo.";
                     break;
                 case "BIRTH_CERT":
-                    Expediente birthExp = expedienteDomainRepo.findById(expedienteId).orElse(null);
-                    if (birthExp != null) {
-                        checkAndAdvanceChildrenStage(birthExp);
-                        birthExp = expedienteDomainRepo.findById(expedienteId).orElse(birthExp);
-                        if (birthExp.getCollectionStage() == DataCollectionStageEnum.PENDING_REGULATORY_AGREEMENT) {
-                            nextStep = " [NEXT_STEP] Confirma MUY BREVEMENTE la recepción del acta de nacimiento (máximo 1 oración corta, ej: 'Acta de nacimiento recibida ✅'). Todos los documentos cargados correctamente. Avanzado a Convenio Regulador. EN UN BLOQUE SEPARADO con su propia cabecera '## 📝 CONVENIO REGULADOR', pregunta qué propone para el convenio regulador (cuidado personal, cuota alimentaria y bienes).";
-                        } else {
-                            nextStep = " [NEXT_STEP] Confirma MUY BREVEMENTE la recepción del acta de nacimiento (máximo 1 oración corta, ej: 'Acta de nacimiento recibida ✅'). Solicita cualquier acta de nacimiento, Certificado CUD o alumno regular restante.";
-                        }
-                    } else {
-                        nextStep = " [NEXT_STEP] Acta de nacimiento recibida. Continúa con el flujo.";
-                    }
+                    nextStep = " [NEXT_STEP] Confirma la recepción de la página del acta de nacimiento para el hijo especificado. Indica al usuario que si tiene más páginas que las envíe ahora, o que escriba 'listo' si ya terminó de cargarlo para este hijo.";
                     break;
                 case "DISABILITY_CERT":
-                    Expediente disExp = expedienteDomainRepo.findById(expedienteId).orElse(null);
-                    if (disExp != null) {
-                        checkAndAdvanceChildrenStage(disExp);
-                        disExp = expedienteDomainRepo.findById(expedienteId).orElse(disExp);
-                        if (disExp.getCollectionStage() == DataCollectionStageEnum.PENDING_REGULATORY_AGREEMENT) {
-                            nextStep = " [NEXT_STEP] Certificado de discapacidad (CUD) recibido. Todos los documentos cargados correctamente. Avanzado a Convenio Regulador. EN UN BLOQUE SEPARADO con su propia cabecera '## 📝 CONVENIO REGULADOR', pregunta qué propone para el convenio regulador (cuidado personal, cuota alimentaria y bienes).";
-                        } else {
-                            nextStep = " [NEXT_STEP] Certificado de discapacidad (CUD) recibido. Solicita cualquier acta de nacimiento o certificado regular de estudios faltante.";
-                        }
-                    } else {
-                        nextStep = " [NEXT_STEP] Certificado de discapacidad (CUD) recibido.";
-                    }
+                    nextStep = " [NEXT_STEP] Confirma la recepción de la página del Certificado Único de Discapacidad (CUD). Indica al usuario que si tiene más páginas que las envíe ahora, o que escriba 'listo' si ya terminó de cargarlo para este hijo.";
                     break;
                 case "STUDENT_PROOF":
-                    Expediente studExp = expedienteDomainRepo.findById(expedienteId).orElse(null);
-                    if (studExp != null) {
-                        checkAndAdvanceChildrenStage(studExp);
-                        studExp = expedienteDomainRepo.findById(expedienteId).orElse(studExp);
-                        if (studExp.getCollectionStage() == DataCollectionStageEnum.PENDING_REGULATORY_AGREEMENT) {
-                            nextStep = " [NEXT_STEP] Certificado de alumno regular recibido. Todos los documentos cargados correctamente. Avanzado a Convenio Regulador. EN UN BLOQUE SEPARADO con su propia cabecera '## 📝 CONVENIO REGULADOR', pregunta qué propone para el convenio regulador (cuidado personal, cuota alimentaria y bienes).";
-                        } else {
-                            nextStep = " [NEXT_STEP] Certificado de alumno regular recibido. Solicita cualquier acta de nacimiento o certificado CUD faltante.";
-                        }
-                    } else {
-                        nextStep = " [NEXT_STEP] Certificado de alumno regular recibido.";
-                    }
+                    nextStep = " [NEXT_STEP] Confirma la recepción de la página del Certificado de alumno regular. Indica al usuario que si tiene más páginas que las envíe ahora, o que escriba 'listo' si ya terminó de cargarlo para este hijo.";
                     break;
                 case "DNI_FRONT":
                     nextStep = " [NEXT_STEP] Confirma recepción del frente del DNI. Pide ahora el dorso del DNI.";
@@ -928,17 +976,10 @@ public class DivorceMcpController {
                     nextStep = " [NEXT_STEP] Confirma recepción del dorso del DNI. Continúa con la siguiente fase pendiente del trámite.";
                     break;
                 case "INCOME_PROOF":
-                    // Avanzar el stage del expediente al recibir el documento de ingresos
-                    Expediente incomeExp = expedienteDomainRepo.findById(expedienteId).orElse(null);
-                    if (incomeExp != null && incomeExp.getCollectionStage() == DataCollectionStageEnum.PENDING_INCOME_PROOF) {
-                        incomeExp.updateCollectionStage(DataCollectionStageEnum.PENDING_MARRIAGE_DETAILS);
-                        expedienteDomainRepo.save(incomeExp);
-                        log.info("Stage avanzado a PENDING_MARRIAGE_DETAILS tras recibir INCOME_PROOF para expediente {}", expedienteId);
-                    }
-                    nextStep = " [NEXT_STEP] Documento de ingresos recibido. Ahora pide SOLO los datos del matrimonio: fecha de matrimonio, fecha de separación y último domicilio conyugal. NO pidas actas ni datos de hijos todavía.";
+                    nextStep = " [NEXT_STEP] Confirma la recepción de la página del comprobante de ingresos. Indica al usuario que si tiene más páginas que las envíe ahora, o que escriba 'listo' si ya terminó de cargarlo por completo.";
                     break;
                 default:
-                    nextStep = " [NEXT_STEP] Confirma recepción del documento. Continúa con la siguiente fase pendiente del trámite.";
+                    nextStep = " [NEXT_STEP] Confirma la recepción del documento. Indica al usuario que si tiene más páginas que las envíe ahora, o que escriba 'listo' si ya terminó de cargarlo.";
                     break;
             }
             
@@ -954,13 +995,13 @@ public class DivorceMcpController {
 
     @Tool(name = "consultar_normativa", description = "Consulta la base de conocimientos legal (CCyC) para responder dudas de derecho de familia.")
     public Mono<String> consultarNormativa(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId,
             @JsonPropertyDescription("La duda legal del usuario (coloquial o técnica)") String query) {
             
         log.info("Tool MCP: consultar_normativa - Query: {}", query);
         
         return Mono.fromCallable(() -> {
-            Optional<ExpedienteJpaEntity> expedienteOpt = expedienteRepository.findFirstByPhone(phoneNumber);
+            Optional<ExpedienteJpaEntity> expedienteOpt = expedienteRepository.findFirstByPhone(normalizePhone(contactId));
             return expedienteOpt.map(this::summarizeCase).orElse("Contexto general.");
         }).subscribeOn(Schedulers.boundedElastic()).flatMap(caseMemory -> {
             if (ragService == null) {
@@ -1063,14 +1104,14 @@ public class DivorceMcpController {
 
     @Tool(name = "book_signature_appointment", description = "Reserva un turno de firma presencial para el interesado.")
     public String bookSignatureAppointment(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber,
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId,
             @JsonPropertyDescription("Fecha y hora acordada para la reserva (YYYY-MM-DDTHH:MM:SS)") String dateTime) {
         
-        UUID expedienteId = resolveExpedienteId(phoneNumber);
+        UUID expedienteId = resolveExpedienteId(contactId);
         LocalDateTime dt = LocalDateTime.parse(dateTime);
         
         Optional<com.lawrabot.divorce_mcp_server.domain.model.SignatureAppointment> appointment = 
-                appointmentService.bookAppointment(expedienteId, dt, phoneNumber);
+                appointmentService.bookAppointment(expedienteId, dt, contactId);
                 
         if (appointment.isPresent()) {
             return "El turno ha sido pre-reservado con éxito para el " + dt.toString().replace("T", " a las ") + 
@@ -1083,9 +1124,9 @@ public class DivorceMcpController {
 
     @Tool(name = "confirm_appointment_commitment", description = "Registra la confirmación expresa del interesado de que asistirá a la cita reservada.")
     public String confirmAppointmentCommitment(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String phoneNumber) {
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId) {
             
-        UUID expedienteId = resolveExpedienteId(phoneNumber);
+        UUID expedienteId = resolveExpedienteId(contactId);
         Optional<com.lawrabot.divorce_mcp_server.domain.model.SignatureAppointment> active = 
                 appointmentService.getActiveAppointment(expedienteId);
                 
@@ -1118,15 +1159,70 @@ public class DivorceMcpController {
         }
     }
 
+    @Tool(name = "confirm_document_upload_completed", description = "Consolida un tipo de documento y avanza a la siguiente etapa del trámite tras recibir la confirmación de 'listo' por parte del usuario.")
+    public String confirmDocumentUploadCompleted(
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente (extraído de [METADATA], ej: 5492634515362). PROHIBIDO inventar.") String contactId,
+            @JsonPropertyDescription("MANDATORIO: El tipo de documento completado. Debe ser uno de: 'MARRIAGE_CERT', 'INCOME_PROOF', 'BIRTH_CERT', 'DISABILITY_CERT'") String documentType) {
+        try {
+            UUID expedienteId = resolveExpedienteId(contactId);
+            Expediente exp = expedienteDomainRepo.findById(expedienteId)
+                    .orElseThrow(() -> new IllegalArgumentException("Expediente no encontrado"));
+            
+            log.info("PDF: Consolidando carga para el documento '{}' en el expediente {}", documentType, expedienteId);
+            
+            String nextStepInfo = "";
+            switch (documentType.toUpperCase()) {
+                case "INCOME_PROOF":
+                    if (exp.getCollectionStage() == DataCollectionStageEnum.PENDING_INCOME_PROOF) {
+                        exp.updateCollectionStage(DataCollectionStageEnum.PENDING_MARRIAGE_DETAILS);
+                        expedienteDomainRepo.save(exp);
+                        nextStepInfo = "Etapa avanzada a PENDING_MARRIAGE_DETAILS. [NEXT_STEP] Solicita los datos del matrimonio: fecha de matrimonio, fecha de separación y último domicilio conyugal. NO pidas actas ni datos de hijos todavía.";
+                    } else {
+                        nextStepInfo = "El expediente ya se encuentra en una etapa posterior.";
+                    }
+                    break;
+                case "MARRIAGE_CERT":
+                    if (exp.getCollectionStage() == DataCollectionStageEnum.PENDING_MARRIAGE_DETAILS) {
+                        exp.updateCollectionStage(DataCollectionStageEnum.PENDING_CHILDREN_INFO);
+                        expedienteDomainRepo.save(exp);
+                        nextStepInfo = "Etapa avanzada a PENDING_CHILDREN_INFO. [NEXT_STEP] Confirma la consolidación del acta de matrimonio y pregunta al usuario de forma cálida: ¿tuvieron hijos en común? NO pidas documentos de hijos todavía.";
+                    } else {
+                        nextStepInfo = "El expediente ya se encuentra en una etapa posterior.";
+                    }
+                    break;
+                case "BIRTH_CERT":
+                case "DISABILITY_CERT":
+                    // Validar si podemos avanzar a convenio regulador
+                    checkAndAdvanceChildrenStage(exp);
+                    // Recargar expediente
+                    exp = expedienteDomainRepo.findById(expedienteId).orElse(exp);
+                    if (exp.getCollectionStage() == DataCollectionStageEnum.PENDING_REGULATORY_AGREEMENT) {
+                        nextStepInfo = "Etapa avanzada a PENDING_REGULATORY_AGREEMENT. Todos los documentos de los hijos fueron consolidados con éxito. [NEXT_STEP] En un bloque separado con su propia cabecera '## 📝 CONVENIO REGULADOR', pregunta qué propone para el convenio regulador (cuidado personal, cuota alimentaria y bienes).";
+                    } else {
+                        nextStepInfo = "Carga de documento para este hijo registrada. Aún quedan actas de nacimiento o certificados CUD pendientes de consolidar para otros hijos.";
+                    }
+                    break;
+                default:
+                    nextStepInfo = "Carga confirmada. Continúa con el flujo normal.";
+                    break;
+            }
+            
+            return "Carga del documento '" + documentType + "' consolidada con éxito. " + nextStepInfo;
+        } catch (Exception e) {
+            log.error("Error al consolidar la carga: {}", e.getMessage(), e);
+            return "Error al consolidar la carga: " + e.getMessage();
+        }
+    }
+
     // ==========================================
     // TOOL-GATED STATE MACHINE (Stage Context)
     // ==========================================
 
     @Tool(name = "get_stage_context", description = "[INTERNAL] Consulta el contexto de fase del expediente para filtrado de herramientas. No la llames directamente.")
     public String getStageContext(
-            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente.") String phoneNumber) {
+            @JsonPropertyDescription("MANDATORIO: El número de teléfono REAL del remitente.") String contactId) {
         try {
-            String normalized = normalizePhone(phoneNumber);
+            String normalized = normalizePhone(contactId);
             Optional<Expediente> optExp = expedienteDomainRepo.findActiveByClientPhone(normalized);
 
             if (optExp.isEmpty()) {
@@ -1179,6 +1275,62 @@ public class DivorceMcpController {
         }
     }
 
+    private Path convertImageToPdf(Path imagePath) throws IOException {
+        log.info("PDF: Convirtiendo imagen '{}' a PDF", imagePath.getFileName());
+        Path tempPdf = Files.createTempFile("evidence_temp_", ".pdf");
+        
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.A4);
+            doc.addPage(page);
+            
+            // Cargar imagen de forma segura
+            PDImageXObject pdImage = PDImageXObject.createFromFileByExtension(imagePath.toFile(), doc);
+            
+            float width = pdImage.getWidth();
+            float height = pdImage.getHeight();
+            float a4Width = PDRectangle.A4.getWidth();
+            float a4Height = PDRectangle.A4.getHeight();
+            
+            // Ajustar imagen proporcionalmente para que quepa en A4 con 20px de margen
+            float scale = Math.min((a4Width - 40) / width, (a4Height - 40) / height);
+            if (scale > 1.0f) {
+                scale = 1.0f; // No agrandar si es más chica
+            }
+            
+            float finalWidth = width * scale;
+            float finalHeight = height * scale;
+            
+            // Centrar en la página A4
+            float x = (a4Width - finalWidth) / 2;
+            float y = (a4Height - finalHeight) / 2;
+            
+            try (PDPageContentStream contents = new PDPageContentStream(doc, page)) {
+                contents.drawImage(pdImage, x, y, finalWidth, finalHeight);
+            }
+            doc.save(tempPdf.toFile());
+        }
+        
+        return tempPdf;
+    }
+
+    private void mergePdfs(Path existingPdfPath, Path newPdfPath) throws IOException {
+        log.info("PDF: Fusionando '{}' en el PDF consolidado '{}'", newPdfPath.getFileName(), existingPdfPath.getFileName());
+        PDFMergerUtility merger = new PDFMergerUtility();
+        
+        // Destino temporal para realizar la fusión de forma segura
+        Path mergedTemp = Files.createTempFile("merged_temp_", ".pdf");
+        merger.setDestinationFileName(mergedTemp.toString());
+        
+        merger.addSource(existingPdfPath.toFile());
+        merger.addSource(newPdfPath.toFile());
+        
+        // Ejecutar fusión
+        merger.mergeDocuments(null);
+        
+        // Sobrescribir el archivo original
+        Files.move(mergedTemp, existingPdfPath, StandardCopyOption.REPLACE_EXISTING);
+    }
+
     /**
      * Determina qué herramientas del dominio están habilitadas para cada fase.
      * Las herramientas utilitarias están SIEMPRE habilitadas.
@@ -1187,7 +1339,8 @@ public class DivorceMcpController {
         List<String> base = new java.util.ArrayList<>(List.of(
             "get_datetime", "consultar_normativa", "get_pending_tasks",
             "complete_observation_task", "get_dossier_stage", "get_stage_context",
-            "submit_digital_evidence", "send_local_file", "generate_pdf"
+            "submit_digital_evidence", "confirm_document_upload_completed",
+            "send_local_file", "generate_pdf"
         ));
 
         switch (stage) {

@@ -39,20 +39,41 @@ public class SubmitSocioEconomicEvaluationService implements SubmitSocioEconomic
         Expediente expediente = repository.findById(expedienteId)
                 .orElseThrow(() -> new IllegalArgumentException("Expediente no encontrado: " + expedienteId));
 
-        // Construir el perfil socioeconómico completo conservando el resultado del scraping previo
+        // Construir el perfil socioeconómico completo conservando el resultado de scraping e identidad previa
         SocioEconomicProfile existingProfile = expediente.getSocioEconomicProfile();
 
-        SocioEconomicProfile updatedProfile = SocioEconomicProfile.builder()
-                .id(existingProfile != null ? existingProfile.getId() : UUID.randomUUID())
-                .scrapingResult(existingProfile != null ? existingProfile.getScrapingResult() : null)
-                .scrapingJustification(existingProfile != null ? existingProfile.getScrapingJustification() : null)
-                .monthlyIncomeArs(monthlyIncomeArs)
-                .housingSituation(housingSituation)
-                .occupation(occupation)
-                .vehiclesRegistered(vehiclesRegistered)
-                .hasFormalEmployment(hasFormalEmployment)
-                .defensoriaObservations(observations)
-                .build();
+        SocioEconomicProfile updatedProfile;
+        if (existingProfile != null) {
+            updatedProfile = SocioEconomicProfile.builder()
+                    .id(existingProfile.getId())
+                    .scrapingResult(existingProfile.getScrapingResult())
+                    .scrapingJustification(existingProfile.getScrapingJustification())
+                    .fullName(existingProfile.getFullName())
+                    .dni(existingProfile.getDni())
+                    .cuil(existingProfile.getCuil())
+                    .birthDate(existingProfile.getBirthDate())
+                    .province(existingProfile.getProvince())
+                    .sex(existingProfile.getSex())
+                    .certificatePath(existingProfile.getCertificatePath())
+                    .monthlyIncomeArs(monthlyIncomeArs)
+                    .housingSituation(housingSituation)
+                    .occupation(occupation)
+                    .vehiclesRegistered(vehiclesRegistered)
+                    .hasFormalEmployment(hasFormalEmployment)
+                    .defensoriaObservations(observations)
+                    .blsgApprovedByDefensoria(existingProfile.getBlsgApprovedByDefensoria())
+                    .build();
+        } else {
+            updatedProfile = SocioEconomicProfile.builder()
+                    .id(UUID.randomUUID())
+                    .monthlyIncomeArs(monthlyIncomeArs)
+                    .housingSituation(housingSituation)
+                    .occupation(occupation)
+                    .vehiclesRegistered(vehiclesRegistered)
+                    .hasFormalEmployment(hasFormalEmployment)
+                    .defensoriaObservations(observations)
+                    .build();
+        }
 
         // Aplicar reglas de negocio de la Defensoría para decidir si aprueba el BLSG.
         boolean approved = !updatedProfile.exceedsIncomeThreshold(CBT_REFERENCE_ARS)

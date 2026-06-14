@@ -27,7 +27,9 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.lawrabot.divorce_mcp_server.application.port.in.ValidateAgreementLegalityUseCase;
 import com.lawrabot.divorce_mcp_server.application.port.out.IExpedienteRepository;
+import com.lawrabot.divorce_mcp_server.domain.enums.AgreementStatusEnum;
 import com.lawrabot.divorce_mcp_server.domain.enums.DivorceTypeEnum;
 import com.lawrabot.divorce_mcp_server.domain.model.Child;
 import com.lawrabot.divorce_mcp_server.domain.model.Expediente;
@@ -47,6 +49,15 @@ import com.lawrabot.divorce_mcp_server.infrastructure.rest.dto.DivorceResponseDT
 import com.lawrabot.divorce_mcp_server.infrastructure.rest.dto.DivorceResponseDTO.RespondentDTO;
 import com.lawrabot.divorce_mcp_server.infrastructure.rest.dto.DivorceResponseDTO.SocioEconomicProfileDTO;
 import com.lawrabot.divorce_mcp_server.infrastructure.rest.dto.UpdateCaseDataRequest;
+import com.lawrabot.divorce_mcp_server.infrastructure.rest.dto.UpdateRegulatoryAgreementRequest;
+import com.lawrabot.divorce_mcp_server.domain.model.RegulatoryAgreement;
+import com.lawrabot.divorce_mcp_server.domain.model.agreement.PersonalCare;
+import com.lawrabot.divorce_mcp_server.domain.model.agreement.CommunicationRegime;
+import com.lawrabot.divorce_mcp_server.domain.model.agreement.AlimonyProvision;
+import com.lawrabot.divorce_mcp_server.domain.model.agreement.AssetDistribution;
+import com.lawrabot.divorce_mcp_server.domain.model.agreement.EconomicCompensation;
+import com.lawrabot.divorce_mcp_server.domain.valueobject.AlimonyAmountVO;
+import com.lawrabot.divorce_mcp_server.domain.enums.*;
 import com.lawrabot.divorce_mcp_server.infrastructure.persistence.entity.DigitalEvidenceJpaEntity;
 import com.lawrabot.divorce_mcp_server.infrastructure.persistence.repository.jpa.SpringDataDigitalEvidenceRepository;
 
@@ -59,11 +70,14 @@ public class DivorceRestController {
 
     private final IExpedienteRepository expedienteRepository;
     private final SpringDataDigitalEvidenceRepository digitalEvidenceRepository;
+    private final ValidateAgreementLegalityUseCase validateAgreementUseCase;
 
     public DivorceRestController(IExpedienteRepository expedienteRepository,
-                                 SpringDataDigitalEvidenceRepository digitalEvidenceRepository) {
+                                 SpringDataDigitalEvidenceRepository digitalEvidenceRepository,
+                                 ValidateAgreementLegalityUseCase validateAgreementUseCase) {
         this.expedienteRepository = expedienteRepository;
         this.digitalEvidenceRepository = digitalEvidenceRepository;
+        this.validateAgreementUseCase = validateAgreementUseCase;
     }
 
     @GetMapping("/cases")
@@ -265,6 +279,149 @@ public class DivorceRestController {
             exp.setRawAgreementText(text);
             expedienteRepository.save(exp);
             return ResponseEntity.ok().<Void>build();
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/cases/{id}/validate-agreement")
+    public ResponseEntity<List<String>> validateAgreement(@PathVariable UUID id) {
+        log.info("REST: Ejecutando validación legal del convenio para expediente: {}", id);
+        var alerts = validateAgreementUseCase.executeSanityCheck(id);
+        return ResponseEntity.ok(alerts);
+    }
+
+    @PutMapping("/cases/{id}/agreement")
+    public ResponseEntity<DivorceResponseDTO> updateRegulatoryAgreement(
+            @PathVariable UUID id,
+            @RequestBody UpdateRegulatoryAgreementRequest request) {
+        log.info("REST: Actualizando convenio estructurado para expediente: {}", id);
+        return expedienteRepository.findById(id).map(exp -> {
+            var existingAgreement = exp.getRegulatoryAgreement();
+            var agreementId = existingAgreement != null ? existingAgreement.getId() : UUID.randomUUID();
+            var agreementStatus = existingAgreement != null ? existingAgreement.getStatus() : AgreementStatusEnum.PROPOSED;
+
+            var personalCareDto = request.getPersonalCare();
+            PersonalCare personalCare = null;
+            if (personalCareDto != null) {
+                var careType = personalCareDto.getCareType();
+                var mainRes = personalCareDto.getMainResidence();
+                personalCare = PersonalCare.builder()
+                        .careType(careType != null && !careType.isEmpty() ? PersonalCareTypeEnum.valueOf(careType) : null)
+                        .mainResidence(mainRes != null && !mainRes.isEmpty() ? MainResidenceEnum.valueOf(mainRes) : null)
+                        .build();
+            }
+
+            var commRegimeDto = request.getCommunicationRegime();
+            CommunicationRegime communicationRegime = null;
+            if (commRegimeDto != null) {
+                var regType = commRegimeDto.getRegimeType();
+                communicationRegime = CommunicationRegime.builder()
+                        .regimeType(regType != null && !regType.isEmpty() ? CommunicationRegimeTypeEnum.valueOf(regType) : null)
+                        .regularSchedule(commRegimeDto.getRegularSchedule())
+                        .holidaySchedule(commRegimeDto.getHolidaySchedule())
+                        .build();
+            }
+
+            var alimonyDto = request.getAlimonyProvision();
+            AlimonyProvision alimonyProvision = null;
+            if (alimonyDto != null) {
+                var provType = alimonyDto.getProvisionType();
+                AlimonyAmountVO amountVO = null;
+                var amountVal = alimonyDto.getAmountValue();
+                if (amountVal != null) {
+                    var currencyStr = alimonyDto.getAmountCurrency();
+                    amountVO = AlimonyAmountVO.of(
+                            amountVal,
+                            currencyStr != null && !currencyStr.isEmpty() ? CurrencyParameterEnum.valueOf(currencyStr) : null,
+                            alimonyDto.getCustomParameter()
+                    );
+                }
+                var freq = alimonyDto.getPaymentFrequency();
+                var method = alimonyDto.getPaymentMethod();
+                var updateMech = alimonyDto.getUpdateMechanism();
+                alimonyProvision = AlimonyProvision.builder()
+                        .provisionType(provType != null && !provType.isEmpty() ? ProvisionTypeEnum.valueOf(provType) : null)
+                        .amount(amountVO)
+                        .paymentFrequency(freq != null && !freq.isEmpty() ? PaymentFrequencyEnum.valueOf(freq) : null)
+                        .paymentMethod(method != null && !method.isEmpty() ? PaymentMethodEnum.valueOf(method) : null)
+                        .paymentDetails(alimonyDto.getPaymentDetails())
+                        .updateMechanism(updateMech != null && !updateMech.isEmpty() ? UpdateMechanismEnum.valueOf(updateMech) : null)
+                        .build();
+            }
+
+            var assetDto = request.getAssetDistribution();
+            AssetDistribution assetDistribution = null;
+            if (assetDto != null) {
+                var homeAttr = assetDto.getHomeAttributionTo();
+                assetDistribution = AssetDistribution.builder()
+                        .homeAttributionTo(homeAttr != null && !homeAttr.isEmpty() ? HomeAttributionEnum.valueOf(homeAttr) : null)
+                        .assetsSummary(assetDto.getAssetsSummary())
+                        .liabilitiesSummary(assetDto.getLiabilitiesSummary())
+                        .build();
+            }
+
+            var ecDto = request.getEconomicCompensation();
+            EconomicCompensation economicCompensation = null;
+            if (ecDto != null) {
+                AlimonyAmountVO ecAmountVO = null;
+                var ecVal = ecDto.getCompensationAmountValue();
+                if (ecVal != null) {
+                    var ecCurrency = ecDto.getCompensationAmountCurrency();
+                    ecAmountVO = AlimonyAmountVO.of(
+                            ecVal,
+                            ecCurrency != null && !ecCurrency.isEmpty() ? CurrencyParameterEnum.valueOf(ecCurrency) : null,
+                            ecDto.getCompensationCustomParameter()
+                    );
+                }
+                var ecPayMethod = ecDto.getPaymentMethod();
+                var beneficiaryStr = ecDto.getBeneficiary();
+                economicCompensation = EconomicCompensation.builder()
+                        .appliesEconomicCompensation(ecDto.isAppliesEconomicCompensation())
+                        .beneficiary(beneficiaryStr != null && !beneficiaryStr.isEmpty() ? SpouseRoleEnum.valueOf(beneficiaryStr) : null)
+                        .imbalanceJustification(ecDto.getImbalanceJustification())
+                        .paymentMethod(ecPayMethod != null && !ecPayMethod.isEmpty() ? CompensationPaymentEnum.valueOf(ecPayMethod) : null)
+                        .compensationAmount(ecAmountVO)
+                        .installmentsCount(ecDto.getInstallmentsCount())
+                        .build();
+            }
+
+            var newAgreement = RegulatoryAgreement.builder()
+                    .id(agreementId)
+                    .status(agreementStatus)
+                    .personalCare(personalCare)
+                    .communicationRegime(communicationRegime)
+                    .alimonyProvision(alimonyProvision)
+                    .assetDistribution(assetDistribution)
+                    .economicCompensation(economicCompensation)
+                    .build();
+
+            exp.setRegulatoryAgreement(newAgreement);
+            expedienteRepository.save(exp);
+            return ResponseEntity.ok(mapToDTO(exp));
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/cases/{id}/agreement-status")
+    public ResponseEntity<DivorceResponseDTO> updateAgreementStatus(
+            @PathVariable UUID id,
+            @RequestParam String status) {
+        log.info("REST: Actualizando estado del convenio para expediente: {} -> {}", id, status);
+        return expedienteRepository.findById(id).map(exp -> {
+            var agreement = exp.getRegulatoryAgreement();
+            if (agreement != null) {
+                var newStatus = AgreementStatusEnum.valueOf(status);
+                var updatedAgreement = RegulatoryAgreement.builder()
+                        .id(agreement.getId())
+                        .status(newStatus)
+                        .personalCare(agreement.getPersonalCare())
+                        .communicationRegime(agreement.getCommunicationRegime())
+                        .alimonyProvision(agreement.getAlimonyProvision())
+                        .assetDistribution(agreement.getAssetDistribution())
+                        .economicCompensation(agreement.getEconomicCompensation())
+                        .build();
+                exp.setRegulatoryAgreement(updatedAgreement);
+                expedienteRepository.save(exp);
+            }
+            return ResponseEntity.ok(mapToDTO(exp));
         }).orElse(ResponseEntity.notFound().build());
     }
 

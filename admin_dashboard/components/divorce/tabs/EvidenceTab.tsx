@@ -88,7 +88,7 @@ export function EvidenceTab({
                 className="bg-surface border border-border rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400 outline-none focus:border-accent/50 transition-all cursor-pointer"
               >
                 {DOC_TYPE_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  <option key={opt.value} value={opt.value} className="bg-zinc-900 text-zinc-200">{opt.label}</option>
                 ))}
               </select>
 
@@ -239,10 +239,10 @@ function EvidenceCard({
       {/* Badge Estado */}
       <div className={cn(
         "absolute top-3 left-3 z-10 px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border",
-        evidence.approved === true ? "bg-success/10 text-success border-success/20" :
-        evidence.approved === false ? "bg-danger/10 text-danger border-danger/20" : "bg-warning/10 text-warning border-warning/20 shadow-lg"
+        evidence.approved ? "bg-success/10 text-success border-success/20" :
+        evidence.rejectionReason ? "bg-danger/10 text-danger border-danger/20" : "bg-warning/10 text-warning border-warning/20 shadow-lg"
       )}>
-        {evidence.approved === true ? "Validado" : evidence.approved === false ? "Impugnado" : "Pendiente"}
+        {evidence.approved ? "Validado" : evidence.rejectionReason ? "Impugnado" : "Pendiente"}
       </div>
 
       {/* Preview Area */}
@@ -334,16 +334,11 @@ function EvidenceCard({
                  >Cancelar</button>
                </div>
             </div>
-          ) : (
+          ) : !evidence.approved && !evidence.rejectionReason ? (
             <div className="flex gap-2">
               <button 
                 onClick={() => onStatusUpdate(evidence.id, true)}
-                className={cn(
-                  "flex-1 h-9 flex items-center justify-center gap-2 rounded-xl transition-all border font-black text-[9px] uppercase tracking-widest",
-                  evidence.approved === true 
-                    ? "bg-success text-white border-success" 
-                    : "bg-success/5 text-success border-success/20 hover:bg-success hover:text-white"
-                )}
+                className="flex-1 h-9 flex items-center justify-center gap-2 rounded-xl transition-all border font-black text-[9px] uppercase tracking-widest bg-success/5 text-success border-success/20 hover:bg-success hover:text-white"
               >
                 <CheckCircle size={16} weight="fill" />
                 Validar
@@ -353,15 +348,34 @@ function EvidenceCard({
                   setRejectionReason("");
                   setActiveReasonInput(evidence.id);
                 }}
-                className={cn(
-                  "flex-1 h-9 flex items-center justify-center gap-2 rounded-xl transition-all border font-black text-[9px] uppercase tracking-widest",
-                  evidence.approved === false 
-                    ? "bg-danger text-white border-danger" 
-                    : "bg-danger/5 text-danger border-danger/20 hover:bg-danger hover:text-white"
-                )}
+                className="flex-1 h-9 flex items-center justify-center gap-2 rounded-xl transition-all border font-black text-[9px] uppercase tracking-widest bg-danger/5 text-danger border-danger/20 hover:bg-danger hover:text-white"
               >
                 <WarningCircle size={16} weight="fill" />
                 Impugnar
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest py-1">
+              <span className={cn(
+                "px-3 py-1.5 rounded-lg border",
+                evidence.approved 
+                  ? "bg-success/10 text-success border-success/20" 
+                  : "bg-danger/10 text-danger border-danger/20"
+              )}>
+                {evidence.approved ? "✓ Validado por operador" : "✗ Impugnado por operador"}
+              </span>
+              <button
+                onClick={() => {
+                  if (evidence.approved) {
+                    setRejectionReason("");
+                    setActiveReasonInput(evidence.id);
+                  } else {
+                    onStatusUpdate(evidence.id, true);
+                  }
+                }}
+                className="text-[9px] text-zinc-500 hover:text-white underline cursor-pointer transition-colors"
+              >
+                Cambiar
               </button>
             </div>
           )}
@@ -373,12 +387,12 @@ function EvidenceCard({
                Reclasificar
              </div>
              <select 
-               className="bg-background/50 border border-border/50 rounded-lg px-2 py-1 text-[8px] font-black uppercase tracking-widest text-zinc-500 outline-none focus:border-accent/40 w-[120px]"
+               className="bg-background/50 border border-border/50 rounded-lg px-2 py-1 text-[8px] font-black uppercase tracking-widest text-zinc-300 outline-none focus:border-accent/40 w-[120px] cursor-pointer hover:text-white transition-colors"
                value={evidence.documentType}
                onChange={(e) => onReclassify(e.target.value)}
              >
                 {DOC_TYPE_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  <option key={opt.value} value={opt.value} className="bg-zinc-900 text-zinc-200">{opt.label}</option>
                 ))}
              </select>
           </div>

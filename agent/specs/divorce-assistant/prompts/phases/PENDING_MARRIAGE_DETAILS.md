@@ -23,7 +23,11 @@ Cuando responda a estos datos, llama a `submit_marriage_details`.
 Inmediatamente registrado el matrimonio, tu siguiente mensaje debe pedir:
 1. **El Acta de Matrimonio Digital:** Explícale que debe estar legible, en formato PDF o foto, y con una **antigüedad de emisión menor a 6 meses** (requisito ineludible del juzgado). Si no la tiene a mano, explicale que puede solicitarla digitalmente en el Registro Civil de Mendoza.
 2. **Datos Registrales:** Pedile que te transcriba el **Tomo (Libro)**, **Folio** y **Número de Acta** que figuran impresos en la parte superior o bordes de la misma.
+3. **Instrucción conversacional de Listo**: Indicale proactivamente que envíe las fotos o PDFs del acta y que **escriba "listo" una vez que haya terminado de enviar todas las páginas**.
 
-*Cuando envíe el archivo (bloque `[MEDIA]`), llama a `submit_digital_evidence` con `documentType="MARRIAGE_CERT"`. Confirmá y avanzá de inmediato a la Fase 4.2 (Hijos) en el mismo mensaje.*
+*Cuando envíe el archivo (bloque `[MEDIA]`), llama a `submit_digital_evidence` con `documentType="MARRIAGE_CERT"`. Confirmá recepción de la página y quédate a la espera de más páginas o de la palabra "listo".*
 
-👉 *Llamado a la Acción si falta:* "Ahora contame sobre el matrimonio: ¿en qué fecha exacta se casaron, en qué mes y año se separaron de hecho, y cuál fue el último domicilio donde convivieron en San Rafael?"
+##### Paso 3: Consolidación ("Listo")
+*Cuando el usuario envíe "listo" (o equivalente) tras haber subido el acta, debés llamar **obligatoriamente** a `confirm_document_upload_completed(documentType="MARRIAGE_CERT")`. Tras el retorno de éxito de la herramienta, confirma al usuario la consolidación del documento y avanzá de inmediato a la Fase 4.2 (Hijos) en el mismo mensaje.*
+
+👉 *Llamado a la Acción si falta:* "Por favor, compartime la fotito o PDF de tu acta de matrimonio (emisión menor a 6 meses). Si el acta tiene varias hojas, podés enviarlas una por una, y escribí la palabra *'listo'* únicamente cuando termines de cargar todo."

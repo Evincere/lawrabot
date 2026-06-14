@@ -1,5 +1,7 @@
 package com.lawrabot.divorce_mcp_server.application.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lawrabot.divorce_mcp_server.application.port.in.ConsultarBlsgUseCase;
 import com.lawrabot.divorce_mcp_server.infrastructure.config.BlsgProperties;
 import com.lawrabot.divorce_mcp_server.infrastructure.service.PlaywrightBrowserManager;
@@ -10,9 +12,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -21,14 +28,26 @@ public class BlsgScrapingService implements ConsultarBlsgUseCase {
 
     private final BlsgProperties blsgProperties;
     private final PlaywrightBrowserManager browserManager;
+    private final ObjectMapper objectMapper;
+    private final HttpClient httpClient;
+
+    // Caché en memoria para el token JWT de Keycloak
+    private volatile String cachedJwtToken = null;
+    private volatile LocalDateTime tokenExpiry = null;
+
     private static final String BLSG_URL = "https://blsg.pjm.gob.ar/";
     private static final String CERTIFICATES_PATH = "storage/certificates/";
     private static final String DIAGNOSTICS_PATH = "storage/diagnostics/";
 
     public BlsgScrapingService(BlsgProperties blsgProperties,
-            PlaywrightBrowserManager browserManager) {
+            PlaywrightBrowserManager browserManager,
+            ObjectMapper objectMapper) {
         this.blsgProperties = blsgProperties;
         this.browserManager = browserManager;
+        this.objectMapper = objectMapper;
+        this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_2)
+                .build();
         try {
             Files.createDirectories(Paths.get(CERTIFICATES_PATH));
             Files.createDirectories(Paths.get(DIAGNOSTICS_PATH));
@@ -39,8 +58,26 @@ public class BlsgScrapingService implements ConsultarBlsgUseCase {
 
     @Override
     public ScrapingResult execute(String phoneNumber, String dni) {
-        log.info("Iniciando scraping BLSG para DNI: {}", dni);
+        log.info("Iniciando consulta BLSG para DNI: {}", dni);
 
+        // ── Paso 0: Intentar consulta directa por API si hay un token cacheado ──
+        String token = this.cachedJwtToken;
+        if (token != null) {
+            log.info("Token JWT encontrado en caché. Intentando consulta directa...");
+            ScrapingResult apiResult = executeDirectApiQuery(dni, token);
+            String benefitStatus = apiResult.benefitStatus();
+            if (apiResult.success()) {
+                log.info("Consulta directa por API exitosa. Retornando datos al instante.");
+                return apiResult;
+            } else if (benefitStatus != null && benefitStatus.equals("UNAUTHORIZED")) {
+                log.warn("Token JWT expirado (401/403). Invalidando caché para renovación con Playwright.");
+                this.cachedJwtToken = null;
+            } else {
+                log.warn("La consulta directa por API falló. Utilizando Playwright como red de seguridad.");
+            }
+        }
+
+        // ── Paso 1: Fallback a Playwright para consulta y captura de nuevo token ──
         Path statePath = browserManager.getStorageStatePath();
         Browser.NewContextOptions options = new Browser.NewContextOptions()
                 .setViewportSize(1280, 800)
@@ -54,10 +91,23 @@ public class BlsgScrapingService implements ConsultarBlsgUseCase {
         try (BrowserContext context = browserManager.createContext(options);
                 Page page = context.newPage()) {
 
+            // Interceptar peticiones para capturar de forma transparente el token JWT enviado a core.blsg.pjm.gob.ar
+            page.onRequest(request -> {
+                if (request.url().contains("core.blsg.pjm.gob.ar")) {
+                    String authHeader = request.headers().get("authorization");
+                    if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                        String jwtToken = authHeader.substring(7);
+                        this.cachedJwtToken = jwtToken;
+                        this.tokenExpiry = LocalDateTime.now().plusHours(1);
+                        log.info("Token JWT de BLSG interceptado y guardado en caché.");
+                    }
+                }
+            });
+
             // Desactivar el bloqueo de recursos no esenciales. Algunos WAF / Anti-Bots 
             // como Cloudflare o Akamai detectan el bloqueo de fuentes o imágenes como señal segura de automatización.
 
-            // ── Paso 1: Navegación inicial ──────────────────────────────────
+            // ── Paso 1.1: Navegación inicial ──────────────────────────────────
             log.info("Navegando a {}", BLSG_URL);
             page.navigate(BLSG_URL);
             page.waitForLoadState(LoadState.DOMCONTENTLOADED);
@@ -460,6 +510,104 @@ public class BlsgScrapingService implements ConsultarBlsgUseCase {
         }
         
         return cleaned;
+    }
+
+    /**
+     * Consulta directa por API HTTP a core.blsg.pjm.gob.ar.
+     */
+    private ScrapingResult executeDirectApiQuery(String dni, String token) {
+        log.info("Ejecutando consulta directa API BLSG para DNI: {}", dni);
+        try {
+            String requestBody = "{\"dni\":\"" + dni + "\"}";
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://core.blsg.pjm.gob.ar/consulta-persona"))
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json, text/plain, */*")
+                    .header("Origin", "https://blsg.pjm.gob.ar")
+                    .header("Referer", "https://blsg.pjm.gob.ar/")
+                    .header("Authorization", "Bearer " + token)
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            int statusCode = response.statusCode();
+            log.info("Respuesta de API directa recibida. Código de estado: {}", statusCode);
+
+            if (statusCode == 200) {
+                String responseBody = response.body();
+                log.info("API directa de BLSG exitosa. Parseando JSON...");
+                JsonNode root = objectMapper.readTree(responseBody);
+                
+                // Mapeo dinámico y tolerante
+                String fullName = getJsonFieldValue(root, "nombre", "nombreCompleto", "fullName", "nombre_completo", "title");
+                if (fullName == null || fullName.isBlank() || fullName.equalsIgnoreCase("null")) {
+                    String firstName = getJsonFieldValue(root, "nombre", "first_name", "first");
+                    String lastName = getJsonFieldValue(root, "apellido", "last_name", "last");
+                    if (firstName != null && lastName != null) {
+                        fullName = lastName + " " + firstName;
+                    }
+                }
+                
+                String cuil = getJsonFieldValue(root, "cuil", "cuit", "cuil_cuit");
+                String birthDate = getJsonFieldValue(root, "fechaNacimiento", "birthDate", "fechaNac", "fecha_nacimiento");
+                String province = getJsonFieldValue(root, "provincia", "province");
+                String sex = getJsonFieldValue(root, "sexo", "sex", "genero", "gender");
+                String benefitStatus = getJsonFieldValue(root, "estado", "beneficio", "benefitStatus", "resultado");
+                
+                if (benefitStatus == null || benefitStatus.isBlank()) {
+                    benefitStatus = "Requiere evaluación adicional (Consulta directa)";
+                }
+
+                log.info("Datos parseados de la API -> Nombre: {}, CUIL: {}, Fecha Nac: {}, Provincia: {}", 
+                        fullName, cuil, birthDate, province);
+
+                return new ScrapingResult(
+                        fullName != null ? fullName.toUpperCase().trim() : "SIN DATOS",
+                        dni,
+                        cuil != null ? cuil.trim() : "S/D",
+                        birthDate != null ? birthDate.trim() : "S/D",
+                        province != null ? province.trim() : "Mendoza",
+                        sex != null ? sex.trim() : "S/D",
+                        benefitStatus,
+                        null, 
+                        true
+                );
+            } else if (statusCode == 401 || statusCode == 403) {
+                log.warn("El token JWT cacheado ha expirado o no es válido (HTTP {}). Se requiere renovación.", statusCode);
+                return new ScrapingResult(null, dni, null, null, null, null, "UNAUTHORIZED", null, false);
+            } else {
+                String errorMsg = "Error en API directa: HTTP " + statusCode + " - " + response.body();
+                log.error(errorMsg);
+                return new ScrapingResult(null, dni, null, null, null, null, errorMsg, null, false);
+            }
+        } catch (Exception e) {
+            log.error("Fallo la consulta directa a la API BLSG: {}", e.getMessage());
+            return new ScrapingResult(null, dni, null, null, null, null, "Exception: " + e.getMessage(), null, false);
+        }
+    }
+
+    /**
+     * Obtiene de forma tolerante el valor de un campo en un nodo JSON.
+     */
+    private String getJsonFieldValue(JsonNode node, String... fieldNames) {
+        for (String fieldName : fieldNames) {
+            JsonNode valNode = node.get(fieldName);
+            if (valNode != null && !valNode.isNull()) {
+                return valNode.asText();
+            }
+            // Búsqueda insensible a mayúsculas/minúsculas
+            java.util.Iterator<String> it = node.fieldNames();
+            while (it.hasNext()) {
+                String key = it.next();
+                if (key.equalsIgnoreCase(fieldName)) {
+                    JsonNode n = node.get(key);
+                    if (n != null && !n.isNull()) {
+                        return n.asText();
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     /**

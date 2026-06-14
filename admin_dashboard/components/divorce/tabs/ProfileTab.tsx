@@ -742,11 +742,11 @@ export function ProfileTab({ expediente, evidences, onUpdate, onEvidenceStatusUp
                     <select
                       value={child.birthCertificateId || ""}
                       onChange={(e) => updateChild(idx, "birthCertificateId", e.target.value)}
-                      className="bg-background/50 border border-border/50 rounded-lg p-3 text-xs text-zinc-400 focus:outline-none focus:border-accent/50"
+                      className="bg-background/50 border border-border/50 rounded-lg p-3 text-xs text-zinc-300 focus:outline-none focus:border-accent/50 cursor-pointer hover:text-white transition-colors"
                     >
-                      <option value="">Sin vincular</option>
+                      <option value="" className="bg-zinc-900 text-zinc-200">Sin vincular</option>
                       {birthCerts.map(cert => (
-                        <option key={cert.id} value={cert.id}>{cert.fileName}</option>
+                        <option key={cert.id} value={cert.id} className="bg-zinc-900 text-zinc-200">{cert.fileName}</option>
                       ))}
                     </select>
                   </div>

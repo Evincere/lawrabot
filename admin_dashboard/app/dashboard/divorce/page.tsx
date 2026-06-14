@@ -20,10 +20,12 @@ import { API_CONFIG } from "@/lib/config/api";
 import { 
   CheckCircle,
   Archive,
-  PaperPlaneTilt
+  PaperPlaneTilt,
+  WarningCircle
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function DivorceWorkspace() {
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
@@ -31,6 +33,12 @@ export default function DivorceWorkspace() {
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [isInboxCollapsed, setIsInboxCollapsed] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    action: () => Promise<void> | void;
+  } | null>(null);
 
   const { 
     data: cases, 
@@ -51,14 +59,6 @@ export default function DivorceWorkspace() {
 
   const viewMode = !activeCaseId ? "idle" : activeTab === null ? "overview" : "focus";
 
-  useEffect(() => {
-    if (viewMode === "focus") {
-      setIsInboxCollapsed(true);
-    } else {
-      setIsInboxCollapsed(false);
-    }
-  }, [viewMode]);
-
   const handleToggleCollapse = () => {
     const newValue = !isInboxCollapsed;
     setIsInboxCollapsed(newValue);
@@ -70,14 +70,17 @@ export default function DivorceWorkspace() {
   const handleTabClick = (tabId: string) => {
     if (activeTab === tabId) {
       setActiveTab(null);
+      setIsInboxCollapsed(false);
     } else {
       setActiveTab(tabId);
+      setIsInboxCollapsed(true);
     }
   };
 
   const handleCaseSelect = (doc: Expediente) => {
     setActiveCaseId(doc.id);
     setActiveTab(null);
+    setIsInboxCollapsed(false);
   };
 
   // Reset scroll when tab changes
@@ -104,7 +107,6 @@ export default function DivorceWorkspace() {
 
   // Agreement state
   const [isEditingAgreement, setIsEditingAgreement] = useState(false);
-  const [draftAgreementText, setDraftAgreementText] = useState("");
   const [isSavingAgreement, setIsSavingAgreement] = useState(false);
 
   const { showToast } = useToast();
@@ -152,19 +154,27 @@ export default function DivorceWorkspace() {
   };
 
   const handleDeleteEvidence = async (evidenceId: string) => {
-    if (!confirm("¿Está seguro de eliminar esta evidencia? Esta acción es irreversible.")) return;
-    try {
-      const res = await fetch(`${API_CONFIG.BASE_URL}/api/divorce/evidence/${evidenceId}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        refetchEvidences();
-        showToast("Evidencia eliminada correctamente", "success");
+    setConfirmDialog({
+      isOpen: true,
+      title: "Eliminar Evidencia",
+      message: "¿Está seguro de eliminar esta evidencia? Esta acción es irreversible.",
+      action: async () => {
+        try {
+          const res = await fetch(`${API_CONFIG.BASE_URL}/api/divorce/evidence/${evidenceId}`, {
+            method: "DELETE",
+          });
+          if (res.ok) {
+            refetchEvidences();
+            showToast("Evidencia eliminada correctamente", "success");
+          }
+        } catch (err) {
+          console.error("Error deleting evidence:", err);
+          showToast("Error al eliminar evidencia", "error");
+        } finally {
+          setConfirmDialog(null);
+        }
       }
-    } catch (err) {
-      console.error("Error deleting evidence:", err);
-      showToast("Error al eliminar evidencia", "error");
-    }
+    });
   };
 
   const handleReclassifyEvidence = async (evidenceId: string, newType: string) => {
@@ -199,14 +209,14 @@ export default function DivorceWorkspace() {
     }
   };
 
-  const handleSaveAgreement = async () => {
+  const handleSaveAgreement = async (text: string) => {
     if (!activeCaseId) return;
     setIsSavingAgreement(true);
     try {
       const response = await fetch(`${API_CONFIG.BASE_URL}/api/divorce/cases/${activeCaseId}/raw-agreement`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawAgreementText: draftAgreementText })
+        body: JSON.stringify({ rawAgreementText: text })
       });
       if (response.ok) {
         showToast("Convenio guardado correctamente", "success");
@@ -245,23 +255,30 @@ export default function DivorceWorkspace() {
 
   const handleArchive = async () => {
     if (!activeCaseId) return;
-    // We still use confirm() for destructive actions as it's a native blocker, 
-    // but the result feedback is now a toast.
-    if (!confirm("¿Está seguro de archivar este expediente? Esta acción es irreversible.")) return;
-
-    try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/api/divorce/cases/${activeCaseId}`, {
-        method: 'DELETE'
-      });
-      if (response.ok) {
-        showToast("Expediente archivado", "info");
-        setActiveCaseId(null);
-        refetchCases();
+    setConfirmDialog({
+      isOpen: true,
+      title: "Archivar Expediente",
+      message: "¿Está seguro de archivar este expediente? Esta acción es irreversible.",
+      action: async () => {
+        try {
+          const response = await fetch(`${API_CONFIG.BASE_URL}/api/divorce/cases/${activeCaseId}`, {
+            method: 'DELETE'
+          });
+          if (response.ok) {
+            showToast("Expediente archivado", "info");
+            setActiveCaseId(null);
+            setActiveTab(null);
+            setIsInboxCollapsed(false);
+            refetchCases();
+          }
+        } catch (error) {
+          console.error("Error archiving case:", error);
+          showToast("Error al archivar", "error");
+        } finally {
+          setConfirmDialog(null);
+        }
       }
-    } catch (error) {
-      console.error("Error archiving case:", error);
-      showToast("Error al archivar", "error");
-    }
+    });
   };
 
   const generateDraft = async (asPdf: boolean) => {
@@ -283,11 +300,6 @@ export default function DivorceWorkspace() {
     }
   };
 
-  useEffect(() => {
-    if (activeCase) {
-      setDraftAgreementText(activeCase.rawAgreementText || "");
-    }
-  }, [activeCase]);
 
   const barActions: UtilityAction[] = [
     { 
@@ -387,7 +399,9 @@ export default function DivorceWorkspace() {
               {activeTab === "blsg" && (
                 <BlsgTab 
                   expediente={activeCase} 
+                  evidences={evidences}
                   onDecision={handleBlsgDecision}
+                  onEvidenceStatusUpdate={handleEvidenceStatus}
                 />
               )}
 
@@ -407,11 +421,10 @@ export default function DivorceWorkspace() {
 
               {activeTab === "agreement" && (
                 <AgreementTab 
+                  key={activeCase.id}
                   expediente={activeCase}
                   isEditing={isEditingAgreement}
                   setIsEditing={setIsEditingAgreement}
-                  draftText={draftAgreementText}
-                  setDraftText={setDraftAgreementText}
                   isSaving={isSavingAgreement}
                   onSave={handleSaveAgreement}
                 />
@@ -456,6 +469,49 @@ export default function DivorceWorkspace() {
         onClose={() => setActiveTool(null)}
         caseId={activeCase?.id.substring(0, 8).toUpperCase() || "..."}
       />
+
+      <AnimatePresence>
+        {confirmDialog?.isOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md bg-zinc-950 border border-border rounded-2xl p-6 shadow-2xl"
+            >
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 rounded-xl bg-danger/10 flex items-center justify-center shrink-0">
+                  <WarningCircle size={24} weight="duotone" className="text-danger" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white uppercase tracking-tight">{confirmDialog.title}</h3>
+                  <p className="text-sm text-zinc-400 mt-1">{confirmDialog.message}</p>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 mt-8">
+                <button
+                  onClick={() => setConfirmDialog(null)}
+                  className="flex-1 px-4 py-3 rounded-xl bg-zinc-900 border border-white/5 text-zinc-300 font-bold hover:bg-zinc-800 hover:text-white transition-all text-sm"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmDialog.action}
+                  className="flex-1 px-4 py-3 rounded-xl bg-danger text-white font-black uppercase tracking-widest text-xs hover:bg-danger/90 hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-danger/20"
+                >
+                  Aceptar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

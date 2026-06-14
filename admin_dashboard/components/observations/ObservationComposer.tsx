@@ -192,12 +192,12 @@ export function ObservationComposer({
           <select
             value={fieldName}
             onChange={(e) => setFieldName(e.target.value)}
-            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-accent/50"
+            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm text-zinc-300 focus:outline-none focus:border-accent/50 cursor-pointer hover:text-white transition-colors"
             required
           >
-            <option value="">Seleccionar campo...</option>
+            <option value="" className="bg-zinc-900 text-zinc-200">Seleccionar campo...</option>
             {availableFields.map((field) => (
-              <option key={field.name} value={field.name}>
+              <option key={field.name} value={field.name} className="bg-zinc-900 text-zinc-200">
                 {field.label}
               </option>
             ))}
