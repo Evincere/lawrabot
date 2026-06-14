@@ -26,7 +26,7 @@
   mcpServers: [
     {
       name: "LawraBot-Legal-Server",
-      url: "http://127.0.0.1:8081/mcp/sse",
+      url: "${MCP_SERVER_URL:-http://127.0.0.1:8081/mcp/sse}",
       enabled: true,
     },
   ],

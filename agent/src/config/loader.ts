@@ -10,7 +10,13 @@ export function loadConfig(specDir: string): AppConfig {
     return AppConfigSchema.parse({});
   }
 
-  const raw = fs.readFileSync(configPath, "utf-8");
+  let raw = fs.readFileSync(configPath, "utf-8");
+  
+  // Substitute environment variables in the format ${VAR} or ${VAR:-default}
+  raw = raw.replace(/\$\{([^}:]+)(?::-([^}]+))?\}/g, (match, envVar, defaultVal) => {
+    return process.env[envVar] !== undefined ? process.env[envVar]! : (defaultVal || match);
+  });
+
   const parsed = JSON5.parse(raw) as unknown;
   const result = AppConfigSchema.safeParse(parsed);
 
