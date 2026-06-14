@@ -1,15 +1,15 @@
-import pkg from "@whiskeysockets/baileys";
-const makeWASocket = (pkg as any).default || pkg;
-const {
+import makeWASocketImport, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   Browsers,
   downloadMediaMessage,
   getContentType,
-} = pkg as any;
+  type WASocket,
+  type proto
+} from "@whiskeysockets/baileys";
 
-import type { WASocket, proto } from "@whiskeysockets/baileys";
+const makeWASocket = (makeWASocketImport as any).default || makeWASocketImport;
 import pino from "pino";
 import qrcode from "qrcode-terminal";
 import * as fs from "fs";
