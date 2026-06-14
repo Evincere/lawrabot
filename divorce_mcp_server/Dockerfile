@@ -1,5 +1,5 @@
 # Etapa de compilación
-FROM maven:3.9.9-eclipse-temurin-21 AS builder
+FROM mirror.gcr.io/library/maven:3.9.9-eclipse-temurin-21 AS builder
 WORKDIR /app
 
 # Copiar POM y descargar dependencias

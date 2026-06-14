@@ -1,4 +1,4 @@
-FROM node:22-alpine AS builder
+FROM mirror.gcr.io/library/node:22-alpine AS builder
 
 # Install pnpm
 RUN corepack enable pnpm
@@ -17,7 +17,7 @@ COPY . .
 # Build
 RUN pnpm build
 
-FROM node:22-alpine
+FROM mirror.gcr.io/library/node:22-alpine
 
 WORKDIR /app
 

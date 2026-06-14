@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: mirror.gcr.io/pgvector/pgvector:pg16
     container_name: lawrabot-db
     restart: always
     environment:
@@ -15,7 +15,7 @@ services:
       - lawrabot-network
 
   redis:
-    image: redis:7-alpine
+    image: mirror.gcr.io/library/redis:7-alpine
     container_name: lawrabot-redis
     restart: always
     volumes:
