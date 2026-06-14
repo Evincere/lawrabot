@@ -35,4 +35,4 @@ RUN pnpm install --prod --frozen-lockfile --ignore-scripts
 # Expose any ports if needed (MCP uses stdio, but maybe web server too?)
 # EXPOSE 3000
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/index.js", "start", "--spec", "specs/divorce-assistant"]
