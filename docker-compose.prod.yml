@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: lawrabot-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_password}
+      POSTGRES_DB: ${POSTGRES_DB:-lawrabot_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - lawrabot-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: lawrabot-redis
+    restart: always
+    volumes:
+      - redisdata:/data
+    networks:
+      - lawrabot-network
+
+  mcp_server:
+    build: 
+      context: ./divorce_mcp_server
+      dockerfile: Dockerfile
+    container_name: lawrabot-mcp
+    restart: always
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/${POSTGRES_DB:-lawrabot_db}
+      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER:-postgres}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-postgres_password}
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OLLAMA_CLOUD_API_KEY=${OLLAMA_CLOUD_API_KEY}
+      - IOL_USER=${IOL_USER}
+      - IOL_PASS=${IOL_PASS}
+    depends_on:
+      - db
+      - redis
+    networks:
+      - lawrabot-network
+    # In Dokploy, we don't expose ports directly to the host unless we want to bypass Traefik.
+    # Instead, Dokploy will route traffic to port 8080.
+    expose:
+      - "8080"
+
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    container_name: lawrabot-agent
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - MCP_SERVER_URL=http://mcp_server:8080
+      # Agrega aquí cualquier otra variable de entorno necesaria para WhatsApp/Baileys
+    depends_on:
+      - mcp_server
+      - redis
+    volumes:
+      - agent-data:/app/.data # Para persistir la sesión de WhatsApp
+    networks:
+      - lawrabot-network
+
+  dashboard:
+    build:
+      context: ./admin_dashboard
+      dockerfile: Dockerfile
+    container_name: lawrabot-dashboard
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://mcp_server:8080 # Si las llamadas al API son client-side, esto debe ser la URL pública del MCP. Si son server-side, la URL interna.
+      - API_URL=http://mcp_server:8080
+    depends_on:
+      - mcp_server
+    expose:
+      - "3000"
+    networks:
+      - lawrabot-network
+
+volumes:
+  pgdata:
+  redisdata:
+  agent-data:
+
+networks:
+  lawrabot-network:
+    driver: bridge
