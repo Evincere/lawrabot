@@ -74,28 +74,48 @@ export class MCPManager {
   // PUBLIC API
   // ──────────────────────────────────────────────────────────
 
+  /** Maximum number of connection attempts before giving up. */
+  private static readonly MAX_CONNECT_RETRIES = 10;
+  /** Initial delay between retries (ms). Doubles each attempt up to MAX_RETRY_DELAY_MS. */
+  private static readonly INITIAL_RETRY_DELAY_MS = 2_000;
+  /** Maximum delay between retries (ms). */
+  private static readonly MAX_RETRY_DELAY_MS = 30_000;
+
   /**
    * Connect to an MCP server via SSE and return its tools.
+   * Retries with exponential backoff if the server isn't ready yet (common at container startup).
    */
   async connectServer(config: MCPServerConfig): Promise<AgentTool[]> {
     this.log.info(`[MCP] Connecting to server "${config.name}" at ${config.url}...`);
 
-    try {
-      const entry = await this.createConnection(config);
-      this.servers.set(config.name, entry);
+    let lastError = "";
+    let delay = MCPManager.INITIAL_RETRY_DELAY_MS;
 
-      this.log.info(`[MCP] Connected to "${config.name}" — ${entry.toolDefinitions.length} tools discovered`);
+    for (let attempt = 1; attempt <= MCPManager.MAX_CONNECT_RETRIES; attempt++) {
+      try {
+        const entry = await this.createConnection(config);
+        this.servers.set(config.name, entry);
 
-      // Start keepalive pings on this connection
-      this.startKeepalive(config.name);
+        this.log.info(`[MCP] Connected to "${config.name}" — ${entry.toolDefinitions.length} tools discovered (attempt ${attempt})`);
 
-      // Build stable tool handles that survive reconnections
-      return entry.toolDefinitions.map((tool) => this.buildToolHandle(config.name, tool));
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.log.error(`[MCP] Failed to connect to "${config.name}": ${msg}`);
-      return [];
+        // Start keepalive pings on this connection
+        this.startKeepalive(config.name);
+
+        // Build stable tool handles that survive reconnections
+        return entry.toolDefinitions.map((tool) => this.buildToolHandle(config.name, tool));
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+
+        if (attempt < MCPManager.MAX_CONNECT_RETRIES) {
+          this.log.warn(`[MCP] Connection attempt ${attempt}/${MCPManager.MAX_CONNECT_RETRIES} failed for "${config.name}": ${lastError}. Retrying in ${delay / 1000}s...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay = Math.min(delay * 2, MCPManager.MAX_RETRY_DELAY_MS);
+        }
+      }
     }
+
+    this.log.error(`[MCP] Failed to connect to "${config.name}" after ${MCPManager.MAX_CONNECT_RETRIES} attempts: ${lastError}`);
+    return [];
   }
 
   /**

@@ -43,6 +43,12 @@ services:
     depends_on:
       - db
       - redis
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/api/divorce/appointments/slots || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     networks:
       - lawrabot-network
     # In Dokploy, we don't expose ports directly to the host unless we want to bypass Traefik.
@@ -62,8 +68,10 @@ services:
       - MCP_SERVER_URL=http://mcp_server:8080
       # Agrega aquí cualquier otra variable de entorno necesaria para WhatsApp/Baileys
     depends_on:
-      - mcp_server
-      - redis
+      mcp_server:
+        condition: service_healthy
+      redis:
+        condition: service_started
     volumes:
       - agent-data:/app/.data # Para persistir la sesión de WhatsApp
     networks:
