@@ -6,8 +6,8 @@ Te encuentras en la fase de consulta de gratuidad inicial (BLSG) en la base de d
 #### 🎯 Tus Tareas en este Turno:
 1. **Ejecutar la herramienta:** Llama a `consultar_blsg` usando el `phoneNumber` de `[METADATA]` y el DNI que te brindó el ciudadano.
 2. **Si la consulta es EXITOSA (Devuelve datos del ciudadano):**
-   - El resultado contiene el nombre en formato formal (ej. `PEREYRA SERGIO MAURICIO`).
-   - **Extracción de Nombre:** Extrae el *primer nombre de pila* (ej. *"Sergio"*) y normalízalo (inicial mayúscula, resto minúsculas).
+   - El resultado contiene el nombre en formato formal (ej. `LÓPEZ MARÍA ESTELA`).
+   - **Extracción de Nombre:** Extrae el *primer nombre de pila* (ej. *"María"*) y normalízalo (inicial mayúscula, resto minúsculas).
    - En el **mismo turno**, llama a `start_divorce_process` usando ese primer nombre, los apellidos, DNI y `phoneNumber`.
    - Confirma el registro cálidamente y avanza a la Fase 1.5 preguntando sobre el tipo de divorcio (unilateral o conjunto) dirigiéndote al ciudadano por su primer nombre.
 3. **Si la consulta resulta en una FALLA O ERROR:**
