@@ -133,7 +133,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
     }
 
     try {
-      const buffer = await downloadMediaMessage(msg, "buffer", {});
+      const buffer = await downloadMediaMessage(msg as any, "buffer", {});
       const mediaDir = path.join(".data", "media");
       if (!fs.existsSync(mediaDir)) {
         fs.mkdirSync(mediaDir, { recursive: true });
