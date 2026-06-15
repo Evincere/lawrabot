@@ -137,6 +137,7 @@ export class OllamaProvider implements LLMProvider {
       }
 
       const data = (await response.json()) as OllamaChatResponse;
+      this.log.info(`[Ollama] Raw response: ${JSON.stringify(data)}`);
 
     const toolCalls: LLMToolCall[] = [];
     if (data.message?.tool_calls) {
