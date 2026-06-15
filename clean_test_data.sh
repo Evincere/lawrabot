@@ -28,9 +28,16 @@ if [ "$CONFIRM" != "si" ]; then
 fi
 
 echo -e "\n${YELLOW}[1/4] Limpiando base de datos PostgreSQL...${NC}"
-# Cargar variables del .env si existe
+# Cargar variables del .env de forma segura si existe
 if [ -f .env ]; then
-    export $(cat .env | grep -v '#' | xargs)
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Ignorar comentarios y líneas vacías
+        if [[ ! "$line" =~ ^[[:space:]]*# ]] && [[ "$line" =~ = ]]; then
+            key=$(echo "$line" | cut -d'=' -f1 | xargs)
+            val=$(echo "$line" | cut -d'=' -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+            export "$key=$val" 2>/dev/null
+        fi
+    done < .env
 fi
 
 DB_USER=${POSTGRES_USER:-postgres}
