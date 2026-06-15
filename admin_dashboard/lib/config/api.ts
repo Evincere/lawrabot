@@ -1,5 +1,5 @@
 export const API_CONFIG = {
-  BASE_URL: "http://localhost:8081",
+  BASE_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081",
   ENDPOINTS: {
     CASES: "/api/divorce/cases",
     EVIDENCE: (caseId: string) => `/api/divorce/evidence/${caseId}`,

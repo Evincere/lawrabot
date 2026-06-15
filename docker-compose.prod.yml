@@ -40,15 +40,10 @@ services:
       - OLLAMA_CLOUD_API_KEY=${OLLAMA_CLOUD_API_KEY}
       - IOL_USER=${IOL_USER}
       - IOL_PASS=${IOL_PASS}
+      - SERVER_PORT=8080
     depends_on:
       - db
       - redis
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/api/divorce/appointments/slots || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
     networks:
       - lawrabot-network
     # In Dokploy, we don't expose ports directly to the host unless we want to bypass Traefik.
@@ -65,13 +60,11 @@ services:
     environment:
       - NODE_ENV=production
       - REDIS_URL=redis://redis:6379
-      - MCP_SERVER_URL=http://mcp_server:8080
+      - MCP_SERVER_URL=http://mcp_server:8080/mcp/sse
       # Agrega aquí cualquier otra variable de entorno necesaria para WhatsApp/Baileys
     depends_on:
-      mcp_server:
-        condition: service_healthy
-      redis:
-        condition: service_started
+      - mcp_server
+      - redis
     volumes:
       - agent-data:/app/.data # Para persistir la sesión de WhatsApp
     networks:
