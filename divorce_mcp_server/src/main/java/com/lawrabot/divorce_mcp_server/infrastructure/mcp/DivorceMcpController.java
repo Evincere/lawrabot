@@ -424,6 +424,21 @@ public class DivorceMcpController {
         // Guardar los hijos elegibles/en proceso
         submitChildrenInfoUseCase.execute(expedienteId, eligibleChildren);
 
+        if (eligibleChildren.isEmpty()) {
+            Expediente exp = expedienteDomainRepo.findById(expedienteId)
+                    .orElseThrow(() -> new IllegalArgumentException("Expediente no encontrado."));
+            exp.updateCollectionStage(DataCollectionStageEnum.PENDING_REGULATORY_AGREEMENT);
+            expedienteDomainRepo.save(exp);
+
+            StringBuilder nextStep = new StringBuilder("Datos de los hijos procesados. ");
+            if (!exclusionsInfo.isEmpty()) {
+                nextStep.append("Los siguientes hijos mayores de edad fueron excluidos del convenio por no cumplir con los requisitos excepcionales de la ley (Art. 658, 663 CCyC): ")
+                        .append(String.join(", ", exclusionsInfo)).append(". ");
+            }
+            nextStep.append("[NEXT_STEP] El caso no posee hijos elegibles (todos fueron excluidos por edad/ley). Avanzado automáticamente al Convenio Regulador. EN UN BLOQUE SEPARADO con su propia cabecera '## 📝 CONVENIO REGULADOR', explica al usuario la exclusión de forma empática y amigable, y pregúntale qué propone para el convenio regulador (distribución de bienes, uso de vivienda, etc.).");
+            return nextStep.toString();
+        }
+
         StringBuilder nextStep = new StringBuilder("Datos de los hijos procesados. ");
         if (!exclusionsInfo.isEmpty()) {
             nextStep.append("Los siguientes hijos mayores de edad fueron excluidos del convenio por no cumplir con los requisitos excepcionales de la ley (Art. 658, 663 CCyC): ")
