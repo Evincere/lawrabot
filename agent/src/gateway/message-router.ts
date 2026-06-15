@@ -164,8 +164,8 @@ export function createMessageRouter(deps: MessageRouterDeps) {
         ...sessionManager.getContextMessages(session),
       ];
 
-      // Si tenemos contexto de etapa con un expediente activo, inyectamos una pista de sistema
-      if (stageContext && stageContext.stage !== "NO_EXPEDIENTE" && stageContext.stage !== "ERROR") {
+      // Si tenemos contexto de etapa, inyectamos una pista de sistema con el estado real de la BD
+      if (stageContext) {
         llmMessages.push({
           role: "system" as const,
           content: buildStageHint(stageContext),

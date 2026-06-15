@@ -61,6 +61,8 @@ fi
 echo -e "\n${YELLOW}[3/4] Limpiando archivos de documentación y evidencias...${NC}"
 # Borrar media descargada por el agente (dentro del contenedor o volumen)
 docker exec -i lawrabot-agent rm -rf /app/.data/media/* 2>/dev/null
+# Borrar historial conversacional persistido del agente
+docker exec -i lawrabot-agent sh -c "rm -rf /app/.data/sessions/* 2>/dev/null"
 # Borrar evidencias guardadas en el mcp server
 docker exec -i lawrabot-mcp rm -rf /app/storage/certificates/* /app/storage/evidences/* ./storage/evidences/* 2>/dev/null
 
