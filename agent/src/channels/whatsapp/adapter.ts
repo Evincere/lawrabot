@@ -104,7 +104,9 @@ export class WhatsAppAdapter implements ChannelAdapter {
         }
 
         const conversationId = msg.key.remoteJid ?? "unknown";
-        const senderId = msg.key.participant ?? msg.key.remoteJid ?? "unknown";
+        const senderId = (msg.key.participant && msg.key.participant.trim() !== "")
+          ? msg.key.participant
+          : (msg.key.remoteJid ?? "unknown");
 
         this.log.info(`[whatsapp] Routing message from ${senderId} to conversation ${conversationId}`);
         
