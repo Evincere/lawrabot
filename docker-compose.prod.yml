@@ -46,6 +46,8 @@ services:
       - redis
     networks:
       - lawrabot-network
+    volumes:
+      - agent-data:/app/.data
     # In Dokploy, we don't expose ports directly to the host unless we want to bypass Traefik.
     # Instead, Dokploy will route traffic to port 8080.
     expose:
