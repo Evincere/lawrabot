@@ -716,7 +716,13 @@ public class DivorceMcpController {
             
         UUID expedienteId = resolveExpedienteId(contactId);
         draftRegulatoryAgreementUseCase.draftAlimony(expedienteId, proposalSummary);
-        return "El borrador de la propuesta de Convenio Regulador ha sido guardado exitosamente. [NEXT_STEP] El expediente está ahora COMPLETO. Informa al ciudadano de forma muy cálida que el trámite ha concluido esta primera etapa y pasa a revisión de un operador de la Defensoría. LUEGO PREGÚNTALE DIRECTAMENTE: '¿Querés que te envíe ahora un resumen del trámite en PDF?'.";
+        
+        Expediente exp = expedienteDomainRepo.findById(expedienteId)
+                .orElseThrow(() -> new IllegalArgumentException("Expediente no encontrado."));
+        exp.updateCollectionStage(com.lawrabot.divorce_mcp_server.domain.enums.DataCollectionStageEnum.COMPLETED);
+        expedienteDomainRepo.save(exp);
+        
+        return "El borrador de la propuesta de Convenio Regulador ha sido guardado exitosamente. [NEXT_STEP] El expediente está ahora en la etapa COMPLETED. Informa al ciudadano de forma muy cálida y alegre que el trámite ha concluido esta primera etapa. LUEGO, de manera inmediata, consulta los turnos de firma disponibles en el sistema y ofréceselos.";
     }
 
     @Tool(name = "validate_agreement_legality", description = "Ejecuta validaciones legales preventivas sobre el expediente.")
@@ -1390,9 +1396,7 @@ public class DivorceMcpController {
                 break;
             case PENDING_REGULATORY_AGREEMENT:
                 base.addAll(List.of("draft_regulatory_agreement", "validate_agreement_legality",
-                    "generate_referral_summary_pdf", "get_available_appointment_slots",
-                    "check_appointment_availability", "book_signature_appointment",
-                    "confirm_appointment_commitment"));
+                    "generate_referral_summary_pdf"));
                 break;
             case COMPLETED:
                 base.addAll(List.of("generate_referral_summary_pdf", "validate_agreement_legality",
