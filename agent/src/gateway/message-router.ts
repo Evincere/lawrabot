@@ -266,11 +266,21 @@ export function createMessageRouter(deps: MessageRouterDeps) {
             for (const tc of response.toolCalls) {
               await hookRunner.run("tool_called", { toolName: tc.function.name });
 
-              let params: Record<string, unknown>;
+              let params: Record<string, any>;
               try {
-                params = JSON.parse(tc.function.arguments) as Record<string, unknown>;
+                params = JSON.parse(tc.function.arguments) as Record<string, any>;
               } catch {
                 params = {};
+              }
+
+              // Fail-safe: Inyectar contactId / phoneNumber si vienen vacíos o nulos
+              if (params) {
+                if (params.contactId === "" || params.contactId === null || params.contactId === undefined) {
+                  params.contactId = phoneFromJid;
+                }
+                if (params.phoneNumber === "" || params.phoneNumber === null || params.phoneNumber === undefined) {
+                  params.phoneNumber = phoneFromJid;
+                }
               }
 
               const result = await toolRegistry.execute(tc.function.name, params, toolCtx);
@@ -350,6 +360,16 @@ export function createMessageRouter(deps: MessageRouterDeps) {
                   const args = typeof tc.function.arguments === "string"
                     ? JSON.parse(tc.function.arguments)
                     : tc.function.arguments;
+
+                  // Fail-safe: Inyectar contactId / phoneNumber si vienen vacíos o nulos
+                  if (args) {
+                    if (args.contactId === "" || args.contactId === null || args.contactId === undefined) {
+                      args.contactId = phoneFromJid;
+                    }
+                    if (args.phoneNumber === "" || args.phoneNumber === null || args.phoneNumber === undefined) {
+                      args.phoneNumber = phoneFromJid;
+                    }
+                  }
 
                   const result = await toolRegistry.execute(tc.function.name, args, toolCtx);
                   sessionManager.addMessage(session, {
