@@ -85,7 +85,7 @@ public class CreateDivorceDossierService implements CreateDivorceDossierUseCase 
         // (es prerrequisito para que el agente llame a start_divorce_process),
         // por lo que el status debe reflejar que estamos en recolección activa.
         expediente.updateCollectionStage(
-                com.lawrabot.divorce_mcp_server.domain.enums.DataCollectionStageEnum.PENDING_SOCIOECONOMIC_EVALUATION);
+                com.lawrabot.divorce_mcp_server.domain.enums.DataCollectionStageEnum.PENDING_MODALITY_SELECTION);
         expediente.updateStatus(
                 com.lawrabot.divorce_mcp_server.domain.enums.ExpedienteStatusEnum.IN_DATA_COLLECTION_PROGRESS);
 
