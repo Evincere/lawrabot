@@ -1272,6 +1272,7 @@ public class DivorceMcpController {
 
             StringBuilder sb = new StringBuilder("{");
             sb.append("\"stage\":\"").append(stage.name()).append("\",");
+            sb.append("\"divorceType\":\"").append(exp.getDivorceType() != null ? exp.getDivorceType().name() : "UNILATERAL").append("\",");
             sb.append("\"hasIncomeProof\":").append(hasIncomeProof).append(",");
             sb.append("\"hasDniFront\":").append(hasDniFront).append(",");
             sb.append("\"hasDniBack\":").append(hasDniBack).append(",");

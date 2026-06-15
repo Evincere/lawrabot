@@ -5,6 +5,7 @@ import type { Logger } from "../utils/logger.js";
 
 export interface StageContext {
   stage: string;
+  divorceType: string;
   hasIncomeProof: boolean;
   pendingDocuments: string[];
   allowedTools: string[];
@@ -69,6 +70,7 @@ export function buildStageHint(stageContext: StageContext): string {
   const today = new Date().toISOString().split("T")[0];
   const lines: string[] = [
     `[STAGE_CONTEXT] Etapa actual del expediente: ${stageContext.stage}.`,
+    `Modalidad actual del trámite: ${stageContext.divorceType || "UNILATERAL"}.`,
     `Fecha actual del sistema: ${today}.`,
   ];
 

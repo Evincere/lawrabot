@@ -612,9 +612,9 @@ function sanitizeBeforeSend(text: string, log: Logger): string {
 
   sanitized = sanitized.trim();
 
-  // 6. Validar que quede contenido significativo
-  const meaningful = sanitized.replace(/[\s.*…\n\r\-()¡¿?!────│emoji]/g, "");
-  if (meaningful.length < 15) {
+  // 6. Validar que quede contenido significativo (quitamos 'emoji' literal de la clase de caracteres y bajamos el umbral a 8)
+  const meaningful = sanitized.replace(/[\s.*…\n\r\-()¡¿?!────│]/g, "");
+  if (meaningful.length < 8) {
     log.warn(`sanitizeBeforeSend: message has insufficient content after cleanup (${meaningful.length} chars). Using fallback.`);
     return "Perfecto, los datos fueron registrados. ¿Podemos continuar con el siguiente paso del trámite?";
   }
