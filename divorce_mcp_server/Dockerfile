@@ -10,14 +10,22 @@ RUN mvn dependency:go-offline
 COPY src ./src
 RUN mvn clean package -DskipTests
 
-# Etapa de ejecución (Usa imagen oficial de Playwright con Java para asegurar dependencias de Chromium)
-FROM mcr.microsoft.com/playwright/java:v1.49.0-noble
+# Etapa de ejecución (Usa Eclipse Temurin en Noble para evitar dependencias de mcr.microsoft.com)
+FROM mirror.gcr.io/library/eclipse-temurin:21-jre-noble
 WORKDIR /app
+
+# Instalar dependencias del sistema y navegadores de Playwright
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm \
+    && npx playwright install-deps \
+    && npx playwright install firefox chromium \
+    && apt-get purge -y nodejs npm \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copiar el JAR generado
 COPY --from=builder /app/target/divorce-mcp-server-0.0.1-SNAPSHOT.jar app.jar
 
-# Exponer puerto del servidor (WebFlux usa 8080 por defecto)
+# Exponer puerto del servidor
 EXPOSE 8080
 
 # Comando de inicio
