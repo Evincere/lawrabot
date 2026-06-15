@@ -720,9 +720,7 @@ public class DivorceMcpController {
         Expediente exp = expedienteDomainRepo.findById(expedienteId)
                 .orElseThrow(() -> new IllegalArgumentException("Expediente no encontrado."));
         exp.updateCollectionStage(com.lawrabot.divorce_mcp_server.domain.enums.DataCollectionStageEnum.COMPLETED);
-        expedienteDomainRepo.save(exp);
-        
-        return "El borrador de la propuesta de Convenio Regulador ha sido guardado exitosamente. [NEXT_STEP] El expediente está ahora en la etapa COMPLETED. Informa al ciudadano de forma muy cálida y alegre que el trámite ha concluido esta primera etapa. LUEGO, de manera inmediata, consulta los turnos de firma disponibles en el sistema y ofréceselos.";
+        return "El borrador de la propuesta de Convenio Regulador ha sido guardado exitosamente. [NEXT_STEP] El expediente está ahora en la etapa COMPLETED. Informa al ciudadano de forma muy cálida, alegre y empática que la recolección de datos, información y documentación ha concluido de manera exitosa. Explícale que ahora un operador humano revisará toda la información y documentación en el centro de operaciones de la Defensoría Oficial, y que en los próximos días se le enviará un mensaje para continuar. NO consultes ni ofrezcas turnos de firma todavía.";
     }
 
     @Tool(name = "validate_agreement_legality", description = "Ejecuta validaciones legales preventivas sobre el expediente.")
