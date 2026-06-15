@@ -229,7 +229,7 @@ public class DivorceMcpController {
         submitPersonalDataUseCase.execute(contactId, com.lawrabot.divorce_mcp_server.domain.enums.CaseRole.PETITIONER, 
                 null, null, contactPhone, nationality, occupation, email, birthDate, addressVO);
         
-        return "Datos del peticionante registrados. [NEXT_STEP] Pide los datos de la ex-pareja (contraparte): nombre completo, DNI, nacionalidad, ocupación, fecha de nacimiento, domicilio actual, teléfono y email. NO pidas documentos ni datos socioeconómicos todavía.";
+        return "Datos del peticionante registrados. [NEXT_STEP] Pide al ciudadano que envíe una foto clara de su DNI (frente y dorso) para registrar su identidad en el sistema. NO pidas los datos de la contraparte ni datos socioeconómicos todavía.";
     }
 
     @Tool(name = "submit_respondent_personal_data", description = "Recolección de datos personales de la ex-pareja (contraparte).")
